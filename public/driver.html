@@ -1,0 +1,1414 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor | Ramallo Taxi Tracker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: #f5f5f5;
+      color: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      overflow: hidden;
+    }
+    
+    /* 🎯 DEBUG: Asegurar que se vea el panel */
+    #driverPanel {
+      display: block !important;
+      visibility: visible !important;
+    }
+    
+    /* 🎯 MAPA FULLSCREEN */
+    #drvMap { 
+      position: fixed;
+      top: 0;
+      left: 400px;
+      width: calc(100% - 400px);
+      height: 100vh;
+      z-index: 1;
+      background: #f9fafb; /* Fondo gris claro mientras carga */
+    }
+    
+    /* 🎯 PANEL LATERAL IZQUIERDO */
+    #driverPanel {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 400px;
+      height: 100vh;
+      background: #fff;
+      box-shadow: 2px 0 20px rgba(0,0,0,0.1);
+      z-index: 1000;
+      overflow-y: auto;
+      padding: 24px;
+      animation: slideInLeft 0.4s ease-out;
+    }
+    
+    @keyframes slideInLeft {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+    
+    /* Título */
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    
+    /* Status Badge */
+    #statusBadge {
+      background: #f0f0f0;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    #statusBadge.available {
+      background: #d4edda;
+      border: 2px solid #28a745;
+    }
+    
+    #statusBadge.ontrip {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+    }
+    
+    /* Botón tipo Uber */
+    .btn-uber {
+      background: #000;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: 600;
+      width: 100%;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 12px;
+    }
+    
+    .btn-uber:hover {
+      background: #222;
+      transform: translateY(-1px);
+    }
+    
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #000;
+      border: 2px solid #ddd;
+    }
+    
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+    
+    /* Input */
+    .form-control {
+      background: #f7f7f7;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      color: #000;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    
+    .form-control:focus {
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.08);
+      outline: none;
+    }
+    
+    /* Label */
+    .form-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #000;
+      margin-bottom: 6px;
+      display: block;
+    }
+    
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: #e0e0e0;
+      margin: 20px 0;
+    }
+    
+    /* Info pequeña */
+    .small-text {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    /* Ocultar elementos por defecto */
+    .d-none { display: none !important; }
+    .d-block { display: block !important; }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      #drvMap {
+        left: 0 !important;
+        width: 100% !important;
+      }
+      
+      #driverPanel {
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        height: auto;
+        max-height: 60vh;
+        border-radius: 20px 20px 0 0;
+      }
+    }
+  </style>
+  <meta name="theme-color" content="#0d6efd" />
+</head>
+<body>
+  <!-- 🎯 MAPA FULLSCREEN -->
+  <div id="drvMap"></div>
+  
+  <!-- 🎯 PANEL LATERAL IZQUIERDO -->
+  <div id="driverPanel">
+    <!-- Header con gradiente -->
+    <div style="background: linear-gradient(135deg, #000 0%, #333 100%); margin: -24px -24px 20px -24px; padding: 24px; border-radius: 0; color: #fff;">
+      <h1 style="margin: 0; font-size: 28px; font-weight: 800;">🚕 Conductor</h1>
+      <p style="margin: 8px 0 0 0; opacity: 0.8; font-size: 14px;">Panel profesional en tiempo real</p>
+    </div>
+    
+    <!-- 🎯 Estadísticas del día -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+      <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 16px; border-radius: 12px; color: #fff;">
+        <div style="font-size: 24px; font-weight: 700;" id="dailyEarnings">$0</div>
+        <div style="font-size: 12px; opacity: 0.9;">Ganancias hoy</div>
+      </div>
+      <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 16px; border-radius: 12px; color: #fff;">
+        <div style="font-size: 24px; font-weight: 700;" id="dailyTrips">0</div>
+        <div style="font-size: 12px; opacity: 0.9;">Viajes hoy</div>
+      </div>
+    </div>
+    
+    <!-- 🎯 Badge de Estado - SIEMPRE VISIBLE -->
+    <div id="statusDisplay" style="background: #f0f0f0; border: 2px solid #999; padding: 16px; border-radius: 12px; margin-bottom: 20px; transition: all 0.3s;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 32px;">⚪</span>
+        <div>
+          <div style="font-weight: 700; font-size: 18px; color: #666;">NO DISPONIBLE</div>
+          <div class="small-text">Presioná "Estoy Disponible" para recibir pedidos</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Banner verde cuando está disponible (oculto por defecto) -->
+    <div id="standbyBanner" class="d-none"></div>
+    
+    <!-- Inputs simples -->
+    <div style="margin-bottom: 16px;">
+      <label class="form-label">Tu nombre/ID</label>
+      <input id="driverId" class="form-control" placeholder="Ej: Juan Pérez" />
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label class="form-label">📱 Contacto emergencia</label>
+      <input id="emergencyContact" class="form-control" placeholder="+549..." />
+    </div>
+    
+    <!-- Ocultos pero necesarios -->
+    <input id="rideId" type="hidden" />
+    <input id="driverPhone" type="hidden" />
+    
+    <div class="divider"></div>
+    
+    <!-- 🎯 Botón principal GRANDE Y PREMIUM -->
+    <button id="btnWait" class="btn-uber" style="padding: 24px; font-size: 20px; margin-bottom: 12px; position: relative; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.15);">
+      <i class="bi bi-broadcast me-2"></i><strong>Estoy Disponible</strong>
+    </button>
+    
+    <button id="btnStopWait" class="btn-uber btn-secondary d-none" style="padding: 20px; font-size: 18px; margin-bottom: 12px;">
+      <i class="bi bi-pause-circle me-2"></i> Pausar pedidos
+    </button>
+    
+    <!-- Acciones del viaje -->
+    <div id="actionWrap" class="d-none">
+      <button id="actionBtn" class="btn-uber" style="background: #28a745;">Llegué</button>
+      <button id="cancelBtn" class="btn-uber btn-secondary">Cancelar viaje</button>
+      <button id="btnDanger" class="btn-uber" style="background: #ffc107; color: #000;">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> Alerta
+      </button>
+      
+      <!-- 💬 Chat con cliente con badge de notificación -->
+      <button id="chatWithClient" class="btn-uber" style="background: #10b981; margin-top: 12px; position: relative;">
+        <i class="bi bi-chat-dots-fill me-2"></i>Chat con cliente
+        <span id="chatNotificationBadge" style="display: none; position: absolute; top: -8px; right: -8px; background: #ef4444; color: #fff; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; animation: pulse 2s infinite;">0</span>
+      </button>
+    </div>
+    
+    <!-- 💬 Ventana de chat -->
+    <div id="chatWindow" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; max-width: 90vw; background: #fff; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 3000;">
+      <div style="background: #10b981; color: #fff; padding: 16px; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: 700;">💬 Chat con cliente</span>
+        <button id="closeChatWindow" style="background: none; border: none; color: #fff; font-size: 24px; cursor: pointer;">×</button>
+      </div>
+      <div id="driverChatMessages" style="height: 300px; overflow-y: auto; padding: 16px; background: #f9fafb;"></div>
+      <div style="padding: 12px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px;">
+        <input type="text" id="driverChatInput" placeholder="Escribe un mensaje..." style="flex: 1; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; outline: none;" />
+        <button id="driverChatSend" style="padding: 10px 16px; background: #10b981; color: #fff; border: none; border-radius: 8px; cursor: pointer;">
+          <i class="bi bi-send-fill"></i>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Elementos ocultos necesarios para el script -->
+    <div style="display: none;">
+      <div id="socketStatus"></div>
+      <div id="driverIdOut"></div>
+      <div id="lastSend"></div>
+      <div id="accOut"></div>
+      <div id="speedOut"></div>
+      <div id="headOut"></div>
+      <div id="httpsWarn"></div>
+      <div id="ridePanel"></div>
+      <div id="etaMin"></div>
+      <div id="btnSelfAssign"></div>
+      <div id="startBtn"></div>
+      <div id="stopBtn"></div>
+      <div id="btnEnablePush"></div>
+      <div id="gpsControls"></div>
+      <div id="mapWrap"></div>
+      <div id="btnSaveDriver"></div>
+      <div id="btnPassengerSuspicious"></div>
+      <div id="btnDriverSuspicious"></div>
+      <div id="btnPathSuspicious"></div>
+      <div id="bgWarn"></div>
+      <input id="accMax" type="number" value="100" />
+      <input id="enforceAcc" type="checkbox" checked />
+              
+              <!-- --- NUEVA FUNCIÓN DE SEGURIDAD: Botones de alerta --- -->
+              <div class="col-12 mt-2">
+                <div class="card border-danger">
+                  <div class="card-header bg-danger text-white">
+                    <h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill me-1"></i> Alertas de Seguridad</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="row g-2">
+                      <div class="col-sm-4">
+                        <button id="btnPassengerSuspicious" class="btn btn-outline-danger w-100"><i class="bi bi-person-exclamation me-1"></i>Pasajero Sospechoso</button>
+                      </div>
+                      <div class="col-sm-4">
+                        <button id="btnDriverSuspicious" class="btn btn-outline-warning w-100"><i class="bi bi-car-front me-1"></i>Conductor Sospechoso</button>
+                      </div>
+                      <div class="col-sm-4">
+                        <button id="btnPathSuspicious" class="btn btn-outline-info w-100"><i class="bi bi-map me-1"></i>Ruta Sospechosa</button>
+                      </div>
+                    </div>
+                    <div class="small text-secondary mt-2">Estos botones envían alertas inmediatas a despacho y contactos de emergencia.</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-3 d-none" id="accWrap">
+                <label class="form-label">Precisión máx. (m)</label>
+                <input id="accMax" type="number" class="form-control" value="100" min="5" step="5" />
+              </div>
+              <div class="col-sm-3 form-check mt-4 d-none" id="enfWrap">
+                <input id="enforceAcc" class="form-check-input" type="checkbox" checked />
+                <label class="form-check-label">Exigir precisión</label>
+              </div>
+            </div>
+
+            <div id="gpsControls" class="d-flex gap-2 mt-3 d-none">
+              <button id="startBtn" class="btn btn-success"><i class="bi bi-play-fill me-1"></i>Iniciar</button>
+              <button id="stopBtn" class="btn btn-outline-danger" disabled><i class="bi bi-stop-fill me-1"></i>Detener</button>
+              <a href="/client.html" class="btn btn-outline-primary">Abrir Cliente</a>
+            </div>
+
+            <div class="alert alert-warning d-none mt-3" id="httpsWarn">
+              <i class="bi bi-shield-lock me-1"></i> iOS/Android pueden requerir HTTPS para geolocalización si no es localhost. Usá un túnel HTTPS (p.ej., ngrok).
+            </div>
+            <div class="alert alert-info d-none mt-2" id="bgWarn">
+              <i class="bi bi-phone me-1"></i> Mantené esta pantalla abierta para seguir compartiendo tu ubicación.
+            </div>
+
+            <div class="row row-cols-2 row-cols-md-3 g-3 mt-1">
+              <div class="col"><div class="small text-secondary">Socket</div><div class="fw-semibold" id="socketStatus">desconectado</div></div>
+              <div class="col"><div class="small text-secondary">Driver ID</div><div class="fw-semibold" id="driverIdOut">-</div></div>
+              <div class="col"><div class="small text-secondary">Precisión</div><div class="fw-semibold" id="accOut">-</div></div>
+              <div class="col"><div class="small text-secondary">Velocidad</div><div class="fw-semibold" id="speedOut">-</div></div>
+              <div class="col"><div class="small text-secondary">Rumbo</div><div class="fw-semibold" id="headOut">-</div></div>
+              <div class="col"><div class="small text-secondary">Último envío</div><div class="fw-semibold mono" id="lastSend">-</div></div>
+            </div>
+
+            <div id="ridePanel" class="mt-4 d-none">
+              <h2 class="h6 mb-2">Estado del viaje</h2>
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-3">
+                  <label class="form-label">ETA (min)</label>
+                  <input id="etaMin" type="number" class="form-control" min="0" step="1" placeholder="ej: 5" />
+                </div>
+                <div class="col-sm-9 d-flex flex-wrap gap-2">
+                  <button id="btnSelfAssign" class="btn btn-outline-secondary">Tomar pedido</button>
+                  <button data-status="arriving" class="btn btn-primary ride-status">En camino</button>
+                  <button data-status="arrived" class="btn btn-outline-primary ride-status">Llegué</button>
+                  <button data-status="ontrip" class="btn btn-warning ride-status">Iniciar viaje</button>
+                  <button data-status="completed" class="btn btn-success ride-status">Finalizar</button>
+                  <button data-status="canceled" class="btn btn-outline-danger ride-status">Cancelar</button>
+                </div>
+              </div>
+              <div class="small text-secondary mt-1">Consejo: actualizá ETA cuando marques “En camino”.</div>
+            </div>
+
+            <div class="mt-3 small text-secondary">Tip: para mejor precisión, activá el GPS de alta precisión y probá al aire libre.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Core Systems -->
+  <script src="/config.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/analytics.js"></script>
+  <!-- UX Systems -->
+  <script src="/toast.js"></script>
+  <script src="/haptics.js"></script>
+  <script src="/sounds.js"></script>
+  <script src="/connection.js"></script>
+  <script src="/theme.js"></script>
+  <script src="/notifications.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/tutorial.js"></script>
+  <!-- Advanced Systems -->
+  <script src="/dispatch-ai.js"></script>
+  <script src="/socket-manager.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const driverIdInput = document.getElementById('driverId');
+    driverIdInput.value = qs.get('driverId') || localStorage.getItem('driverId') || 'taxi-ramallo-1';
+    // --- NUEVA FUNCIÓN DE SEGURIDAD: Declarar y cargar contacto de emergencia ---
+    const emergencyContactInput = document.getElementById('emergencyContact');
+    emergencyContactInput.value = localStorage.getItem('emergencyContact') || '';
+    const rideIdInput = document.getElementById('rideId');
+    rideIdInput.value = qs.get('rideId') || '';
+    const accMaxInput = document.getElementById('accMax');
+    const enforceAcc = document.getElementById('enforceAcc');
+
+    const socket = io();
+    const socketStatus = document.getElementById('socketStatus');
+    const driverIdOut = document.getElementById('driverIdOut');
+    const lastSend = document.getElementById('lastSend');
+    const accOut = document.getElementById('accOut');
+    const speedOut = document.getElementById('speedOut');
+    const headOut = document.getElementById('headOut');
+    const httpsWarn = document.getElementById('httpsWarn');
+    const ridePanel = document.getElementById('ridePanel');
+    const standbyBanner = document.getElementById('standbyBanner');
+    const etaMin = document.getElementById('etaMin');
+    const btnSelfAssign = document.getElementById('btnSelfAssign');
+
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const btnWait = document.getElementById('btnWait');
+    const btnStopWait = document.getElementById('btnStopWait');
+    const gpsControls = document.getElementById('gpsControls');
+    const mapWrap = document.getElementById('mapWrap');
+    const btnEnablePush = document.getElementById('btnEnablePush');
+    const actionWrap = document.getElementById('actionWrap');
+    const actionBtn = document.getElementById('actionBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const btnDanger = document.getElementById('btnDanger');
+    // --- NUEVA FUNCIÓN DE SEGURIDAD ---
+    const btnSaveDriver = document.getElementById('btnSaveDriver');
+    const btnPassengerSuspicious = document.getElementById('btnPassengerSuspicious');
+    const btnDriverSuspicious = document.getElementById('btnDriverSuspicious');
+    const btnPathSuspicious = document.getElementById('btnPathSuspicious');
+
+    let watchId = null;
+    // Wake Lock to keep screen on during active ride
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener?.('release',()=>{}); } } catch {}
+    }
+    async function releaseWakeLock() { try { await wakeLock?.release(); } catch {} wakeLock = null; }
+    const bgWarn = document.getElementById('bgWarn');
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.visibilityState==='visible') {
+        if (wakeLock) requestWakeLock();
+        bgWarn?.classList.add('d-none');
+      } else {
+        // show info banner only if an active ride is running
+        const hasRide = !!(rideIdInput.value.trim());
+        if (hasRide) bgWarn?.classList.remove('d-none');
+      }
+    });
+    // Straight-line simulation (legacy for pre-accept preview)
+    let simTimer = null; let simPoints = []; let simIdx = 0; let currentSimLatLng = null;
+    // Driver map
+    let dMap = null, dMarker = null, dCircle = null, dRoute = null, dPickup = null, dDest = null;
+    // Sim over OSRM
+    let osrmTimer = null; let osrmIdx = 0; let osrmLine = [];
+    let phase = null; // 'to_pickup' | 'to_dest'
+
+    // Persist/rehydrate ride state
+    function saveDriverState() {
+      try {
+        const state = { driverId: (driverIdInput.value.trim()||'taxi-ramallo-1'), rideId: rideIdInput.value.trim()||null, phase, currentStatus };
+        localStorage.setItem('driverState', JSON.stringify(state));
+      } catch {}
+    }
+    function loadDriverState() {
+      try { return JSON.parse(localStorage.getItem('driverState')||'null'); } catch { return null; }
+    }
+
+    // Follow suave del marcador durante el viaje
+    let followOn = false; let lastFollowTs = 0;
+    function maybeFollow(latlng) {
+      if (!followOn || !dMap) return;
+      const now = Date.now();
+      if (now - lastFollowTs < 1500) return;
+      try { dMap.panTo(latlng, { animate: true }); lastFollowTs = now; } catch {}
+    }
+
+    function updateHttpsWarning() {
+      const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      const isHttps = location.protocol === 'https:';
+      httpsWarn.classList.toggle('d-none', isLocalhost || isHttps);
+    }
+    updateHttpsWarning();
+
+    socket.on('connect', () => { socketStatus.textContent = 'conectado'; });
+    socket.on('disconnect', () => { socketStatus.textContent = 'desconectado'; });
+
+    let acceptingOffers = false;
+    function joinRoom() {
+      const driverId = driverIdInput.value.trim() || 'taxi-ramallo-1';
+      localStorage.setItem('driverId', driverId);
+      driverIdOut.textContent = driverId;
+      
+      console.log('🔌 Uniéndose al room del conductor:', driverId);
+      socket.emit('join', { role: 'driver', driverId });
+      
+      // 🎯 Asegurar que el input tenga el valor
+      if (!driverIdInput.value) {
+        driverIdInput.value = driverId;
+      }
+
+      // show ride panel if rideId present
+      ridePanel.classList.toggle('d-none', !rideIdInput.value.trim());
+      // standby banner shown only when in waiting mode and no ride
+      standbyBanner.classList.toggle('d-none', !(acceptingOffers && !rideIdInput.value.trim()));
+      // show GPS controls only when we have a ride
+      gpsControls.classList.toggle('d-none', !rideIdInput.value.trim());
+      // show map only when have a ride
+      mapWrap.classList.toggle('d-none', !rideIdInput.value.trim());
+      // join ride room if present to receive updates
+      if (rideIdInput.value.trim()) {
+        socket.emit('join_ride', { rideId: rideIdInput.value.trim() });
+      }
+    }
+
+    // 🎯 Sistema de estadísticas del día
+    function loadDailyStats() {
+      const today = new Date().toDateString();
+      const saved = localStorage.getItem('driverStats');
+      
+      if (saved) {
+        try {
+          const stats = JSON.parse(saved);
+          if (stats.date === today) {
+            document.getElementById('dailyEarnings').textContent = `$${stats.earnings}`;
+            document.getElementById('dailyTrips').textContent = stats.trips;
+            return;
+          }
+        } catch {}
+      }
+      
+      // Reset si es un nuevo día
+      saveDailyStats(0, 0);
+    }
+    
+    function saveDailyStats(earnings, trips) {
+      const today = new Date().toDateString();
+      const stats = { date: today, earnings, trips };
+      localStorage.setItem('driverStats', JSON.stringify(stats));
+      document.getElementById('dailyEarnings').textContent = `$${earnings}`;
+      document.getElementById('dailyTrips').textContent = trips;
+    }
+    
+    function incrementTrip(fareAmount = 500) {
+      const today = new Date().toDateString();
+      const saved = localStorage.getItem('driverStats');
+      let earnings = 0, trips = 0;
+      
+      if (saved) {
+        try {
+          const stats = JSON.parse(saved);
+          if (stats.date === today) {
+            earnings = stats.earnings || 0;
+            trips = stats.trips || 0;
+          }
+        } catch {}
+      }
+      
+      earnings += fareAmount;
+      trips += 1;
+      saveDailyStats(earnings, trips);
+      
+      // Animación de incremento
+      const earningsEl = document.getElementById('dailyEarnings');
+      earningsEl.style.transform = 'scale(1.2)';
+      earningsEl.style.transition = 'transform 0.3s';
+      setTimeout(() => {
+        earningsEl.style.transform = 'scale(1)';
+      }, 300);
+    }
+    
+    // 💬 CHAT CON CLIENTE
+    const chatWithClientBtn = document.getElementById('chatWithClient');
+    const chatWindow = document.getElementById('chatWindow');
+    const closeChatWindow = document.getElementById('closeChatWindow');
+    const driverChatMessages = document.getElementById('driverChatMessages');
+    const driverChatInput = document.getElementById('driverChatInput');
+    const driverChatSend = document.getElementById('driverChatSend');
+    
+    chatWithClientBtn?.addEventListener('click', () => {
+      chatWindow.style.display = 'block';
+    });
+    
+    closeChatWindow?.addEventListener('click', () => {
+      chatWindow.style.display = 'none';
+    });
+    
+    function sendDriverChatMessage() {
+      const msg = driverChatInput.value.trim();
+      const rid = rideIdInput.value.trim();
+      if (!msg || !rid) return;
+      
+      socket.emit('chat_message', { rideId: rid, message: msg, from: 'driver' });
+      addDriverChatMessage(msg, 'driver');
+      driverChatInput.value = '';
+    }
+    
+    driverChatSend?.addEventListener('click', sendDriverChatMessage);
+    driverChatInput?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendDriverChatMessage();
+    });
+    
+    function addDriverChatMessage(text, from) {
+      const div = document.createElement('div');
+      div.style.marginBottom = '12px';
+      div.style.textAlign = from === 'driver' ? 'right' : 'left';
+      div.innerHTML = `
+        <div style="display: inline-block; max-width: 70%; padding: 10px 14px; border-radius: 12px; background: ${from === 'driver' ? '#10b981' : '#e5e7eb'}; color: ${from === 'driver' ? '#fff' : '#000'}; font-size: 14px;">
+          ${text}
+        </div>
+      `;
+      driverChatMessages.appendChild(div);
+      driverChatMessages.scrollTop = driverChatMessages.scrollHeight;
+    }
+    
+    // Recibir mensajes del cliente
+    let unreadMessages = 0;
+    const chatNotificationBadge = document.getElementById('chatNotificationBadge');
+    
+    socket.on('chat_message', ({ message, from }) => {
+      if (from === 'client') {
+        addDriverChatMessage(message, 'client');
+        
+        // Mostrar badge si el chat está cerrado
+        if (chatWindow.style.display === 'none') {
+          unreadMessages++;
+          chatNotificationBadge.textContent = unreadMessages;
+          chatNotificationBadge.style.display = 'flex';
+        }
+        
+        try { playOfferAlert(); } catch {}
+      }
+    });
+    
+    // Resetear contador cuando abre chat
+    chatWithClientBtn?.addEventListener('click', () => {
+      unreadMessages = 0;
+      chatNotificationBadge.style.display = 'none';
+    });
+    
+    // 🎯 FIX: Auto-activar modo disponible si no hay viaje activo
+    window.addEventListener('load', () => {
+      // Cargar estadísticas
+      loadDailyStats();
+      
+      // 🎯 INICIALIZAR MAPA INMEDIATAMENTE
+      setTimeout(() => {
+        try {
+          if (!dMap) {
+            dMap = L.map('drvMap').setView([-33.4847, -60.0062], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+              maxZoom: 19,
+              attribution: '© OpenStreetMap'
+            }).addTo(dMap);
+            console.log('✅ Mapa del conductor inicializado');
+          }
+        } catch (e) {
+          console.error('Error iniciando mapa:', e);
+        }
+      }, 500);
+      
+      joinRoom(); 
+      
+      // Si no hay viaje activo, activar automáticamente modo espera
+      if (!rideIdInput.value.trim()) {
+        setTimeout(() => {
+          acceptingOffers = true;
+          btnWait.classList.add('d-none');
+          btnStopWait.classList.remove('d-none');
+          standbyBanner.classList.remove('d-none');
+          
+          // 🎯 Actualizar badge de estado
+          const statusDisplay = document.getElementById('statusDisplay');
+          statusDisplay.style.background = '#d4edda';
+          statusDisplay.style.borderColor = '#28a745';
+          statusDisplay.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 32px;">🟢</span>
+              <div>
+                <div style="font-weight: 700; font-size: 18px; color: #155724;">DISPONIBLE</div>
+                <div class="small-text">Compartiendo ubicación...</div>
+              </div>
+            </div>
+          `;
+          
+          // 🎯 AUTO-INICIAR GPS
+          try {
+            startSharing();
+            console.log('✅ GPS iniciado automáticamente');
+          } catch (e) {
+            console.warn('⚠️ Error iniciando GPS:', e);
+          }
+          
+          console.log('✅ Conductor disponible para viajes');
+        }, 500);
+      }
+    });
+
+    btnWait.addEventListener('click', () => {
+      acceptingOffers = true;
+      btnWait.classList.add('d-none');
+      btnStopWait.classList.remove('d-none');
+      standbyBanner.classList.remove('d-none');
+      
+      // 🎯 Actualizar badge de estado
+      const statusDisplay = document.getElementById('statusDisplay');
+      statusDisplay.style.background = '#d4edda';
+      statusDisplay.style.borderColor = '#28a745';
+      statusDisplay.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 32px;">🟢</span>
+          <div>
+            <div style="font-weight: 700; font-size: 18px; color: #155724;">DISPONIBLE</div>
+            <div class="small-text">Compartiendo ubicación...</div>
+          </div>
+        </div>
+      `;
+      
+      // 🎯 AUTO-INICIAR GPS cuando se pone disponible
+      try {
+        startSharing();
+        console.log('✅ GPS iniciado automáticamente');
+      } catch (e) {
+        console.warn('⚠️ Error iniciando GPS:', e);
+      }
+      
+      console.log('✅ Conductor disponible para viajes');
+    });
+    
+    btnStopWait.addEventListener('click', () => {
+      acceptingOffers = false;
+      btnStopWait.classList.add('d-none');
+      btnWait.classList.remove('d-none');
+      standbyBanner.classList.add('d-none');
+      
+      // 🎯 Actualizar badge de estado
+      const statusDisplay = document.getElementById('statusDisplay');
+      statusDisplay.style.background = '#f0f0f0';
+      statusDisplay.style.borderColor = '#999';
+      statusDisplay.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 32px;">⚪</span>
+          <div>
+            <div style="font-weight: 700; font-size: 18px; color: #666;">NO DISPONIBLE</div>
+            <div class="small-text">Presioná "Estoy Disponible" para recibir pedidos</div>
+          </div>
+        </div>
+      `;
+    });
+
+    async function subscribePush() {
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) { alert('Push no disponible'); return; }
+        const reg = await navigator.serviceWorker.ready;
+        const pub = await fetch('/api/push/publicKey').then(r=>r.json());
+        if (!pub.publicKey) { alert('Push desactivado en servidor'); return; }
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(pub.publicKey) });
+        await fetch('/api/push/subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subscription: sub }) });
+        btnEnablePush.classList.add('d-none');
+        alert('Notificaciones habilitadas');
+      } catch (e) {
+        alert('No se pudo habilitar push');
+      }
+    }
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64); const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+      return outputArray;
+    }
+    btnEnablePush.addEventListener('click', async () => {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return alert('Permiso de notificaciones denegado');
+      subscribePush();
+    });
+
+    function startSharing() {
+      joinRoom();
+      if (!('geolocation' in navigator)) { alert('Geolocalización no soportada.'); return; }
+      startBtn.disabled = true; stopBtn.disabled = false;
+      requestWakeLock();
+      watchId = navigator.geolocation.watchPosition(onPos, onErr, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 15000,
+      });
+    }
+
+    function stopSharing() {
+      if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+      startBtn.disabled = false; stopBtn.disabled = true;
+      releaseWakeLock();
+    }
+
+    function onPos(pos) {
+      const { latitude: lat, longitude: lng, accuracy, heading, speed } = pos.coords;
+      accOut.textContent = `${Math.round(accuracy)} m`;
+      speedOut.textContent = speed != null ? `${(speed||0).toFixed(1)} m/s` : '-';
+      headOut.textContent = heading != null ? `${Math.round(heading)}°` : '-';
+
+      const maxAcc = Number(accMaxInput.value || 0);
+      const requireGood = enforceAcc.checked && maxAcc > 0;
+      if (requireGood && accuracy > maxAcc) {
+        lastSend.textContent = `Señal débil (±${Math.round(accuracy)}m). No enviado.`;
+        return; // no emitas posiciones malas
+      }
+
+      const payload = { lat, lng, accuracy, heading, speed, timestamp: pos.timestamp };
+      socket.emit('location', payload);
+      console.log('📍 Ubicación enviada:', `${lat.toFixed(5)}, ${lng.toFixed(5)} (±${Math.round(accuracy)}m)`);
+      lastSend.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)} (±${Math.round(accuracy)}m)`;
+
+      // update driver map marker
+      if (dMap) {
+        const latlng = [lat, lng];
+        if (!dMarker) dMarker = L.marker(latlng).addTo(dMap); else dMarker.setLatLng(latlng);
+        const visual = Math.min(accuracy||0, 200);
+        if (!dCircle) dCircle = L.circle(latlng, { radius: visual, color: '#0d6efd', fillColor: '#0d6efd', fillOpacity: 0.15 }).addTo(dMap);
+        else { dCircle.setLatLng(latlng); dCircle.setRadius(visual); }
+      }
+    }
+
+    function onErr(err) {
+      console.warn('Geo error', err);
+      alert('Error de GPS: ' + err.message);
+    }
+
+    startBtn.addEventListener('click', startSharing);
+    stopBtn.addEventListener('click', stopSharing);
+
+    async function postJSON(url, body) {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body||{}) });
+      if (!res.ok) { const t = await res.text(); throw new Error(t||'error'); }
+      return res.json();
+    }
+
+    btnSelfAssign?.addEventListener('click', async () => {
+      const rideId = rideIdInput.value.trim();
+      const driverId = (driverIdInput.value.trim()||'taxi-ramallo-1');
+      if (!rideId) return alert('Ingresá rideId');
+      try {
+        await postJSON(`/api/rides/${rideId}/assign`, { driverId });
+        alert('Pedido asignado');
+      } catch (e) {
+        alert('Error asignando');
+      }
+    });
+
+    for (const btn of document.querySelectorAll('.ride-status')) {
+      btn.addEventListener('click', async () => {
+        const rideId = rideIdInput.value.trim();
+        if (!rideId) return alert('Ingresá rideId');
+        const status = btn.getAttribute('data-status');
+        const etaSec = etaMin.value ? Number(etaMin.value)*60 : undefined;
+        try {
+          await postJSON(`/api/rides/${rideId}/status`, { status, etaSec });
+          setCurrentStatus(status);
+        } catch (e) {
+          alert('Error actualizando estado');
+        }
+      });
+    }
+
+    // ========== Ride offers (standby) ==========
+    // Audio priming for iOS/Android
+    let audioCtx = null;
+    function primeAudio() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch {}
+    }
+    document.addEventListener('touchstart', primeAudio, { once: true });
+    document.addEventListener('click', primeAudio, { once: true });
+
+    function playOfferAlert() {
+      try { navigator.vibrate?.([250,120,250]); } catch {}
+      try {
+        primeAudio();
+        if (!audioCtx) return;
+        const beep = (f, t) => { const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.frequency.value=f; o.type='sine'; o.connect(g); g.connect(audioCtx.destination); o.start(); g.gain.setValueAtTime(0.2, audioCtx.currentTime); o.stop(audioCtx.currentTime+t); };
+        beep(440, 0.15); setTimeout(()=>beep(660,0.15), 200);
+      } catch {}
+    }
+
+    // Beeps para acciones del chofer
+    function playArrivedBeep() {
+      try { navigator.vibrate?.([220,100,220]); } catch {}
+      try {
+        primeAudio(); if (!audioCtx) return;
+        const mk = (f,d=0.12,del=0)=>{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination); const t0=audioCtx.currentTime+del; g.gain.setValueAtTime(0.18,t0); o.start(t0); o.stop(t0+d); };
+        mk(700,0.12,0); mk(880,0.12,0.18);
+      } catch {}
+    }
+    function playCompletedBeep() {
+      try { navigator.vibrate?.([300,120,300]); } catch {}
+      try {
+        primeAudio(); if (!audioCtx) return;
+        const mk = (f,d=0.14,del=0)=>{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='triangle'; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination); const t0=audioCtx.currentTime+del; g.gain.setValueAtTime(0.18,t0); o.start(t0); o.stop(t0+d); };
+        mk(523,0.14,0); mk(659,0.14,0.2); mk(784,0.16,0.4);
+      } catch {}
+    }
+
+    async function ensureDriverMap() {
+      if (dMap) return;
+      dMap = L.map('drvMap').setView([-33.4847, -60.0062], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(dMap);
+      dRoute = L.polyline([], { color:'#6c757d', weight:3, opacity:.9 }).addTo(dMap);
+    }
+
+    async function drawRideOnMap(rideId) {
+      await ensureDriverMap();
+      // fetch ride with coords
+      const r = await fetch(`/api/rides/${rideId}`); if (!r.ok) return;
+      const ride = await r.json();
+      
+      // 🎯 FIX: Marcar pickup con ícono destacado
+      if (ride.pickupCoord) {
+        const a = [ride.pickupCoord.lat, ride.pickupCoord.lng];
+        const pickupIcon = L.divIcon({ 
+          className: '', 
+          html: '<div style="background:#28a745;border:3px solid #fff;border-radius:50%;width:24px;height:24px;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>', 
+          iconSize: [24, 24], 
+          iconAnchor: [12, 12] 
+        });
+        if (!dPickup) dPickup = L.marker(a, { icon: pickupIcon, title:'Punto de partida' }).addTo(dMap); 
+        else { dPickup.setLatLng(a); dPickup.setIcon(pickupIcon); }
+      }
+      
+      if (ride.destCoord) {
+        const b = [ride.destCoord.lat, ride.destCoord.lng];
+        const destIcon = L.divIcon({ 
+          className: '', 
+          html: '<div style="background:#dc3545;border:3px solid #fff;border-radius:50%;width:20px;height:20px;"></div>', 
+          iconSize: [20, 20], 
+          iconAnchor: [10, 10] 
+        });
+        if (!dDest) dDest = L.marker(b, { icon: destIcon, title:'Destino' }).addTo(dMap); 
+        else { dDest.setLatLng(b); dDest.setIcon(destIcon); }
+      }
+      
+      // 🎯 FIX: Centrar en ubicación actual del conductor + pickup
+      const pointsToFit = [];
+      if (ride.pickupCoord) pointsToFit.push([ride.pickupCoord.lat, ride.pickupCoord.lng]);
+      if (ride.destCoord) pointsToFit.push([ride.destCoord.lat, ride.destCoord.lng]);
+      
+      // Si tenemos ubicación del conductor, agregarla
+      if (currentSimLatLng) pointsToFit.push(currentSimLatLng);
+      
+      if (pointsToFit.length > 0) {
+        const bnds = L.latLngBounds(pointsToFit);
+        dMap.fitBounds(bnds.pad(0.3));
+      }
+      
+      // Dibujar ruta completa pickup -> destino
+      if (ride.pickupCoord && ride.destCoord) {
+        try {
+          const q = `from=${ride.pickupCoord.lat},${ride.pickupCoord.lng}&to=${ride.destCoord.lat},${ride.destCoord.lng}`;
+          const rr = await fetch(`/api/route?${q}`);
+          const jj = await rr.json();
+          const line = (jj.ok && jj.line?.length) ? jj.line : [ride.pickupCoord, ride.destCoord];
+          dRoute.setLatLngs(line.map(p=>[p.lat,p.lng]));
+        } catch {}
+      }
+    }
+
+    function showOffer(ride) {
+      // simple toast/modal replacement
+      const div = document.createElement('div');
+      div.className = 'position-fixed top-50 start-50 translate-middle p-3';
+      div.style.zIndex = 1080;
+      div.innerHTML = `
+        <div class="card shadow-lg border-warning border-3" id="offerCard" style="min-width: 380px; max-width: 90vw;">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-bell-fill me-2"></i>¡Nuevo Viaje Disponible!</h5>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="fw-bold fs-4 text-primary">${ride.name || 'Cliente'}</div>
+            </div>
+            <div class="mb-2">
+              <div class="fw-semibold"><i class="bi bi-geo-alt-fill text-success me-1"></i>Recoger en:</div>
+              <div class="fs-5">${ride.pickupText || '-'}</div>
+            </div>
+            <div class="mb-3">
+              <div class="fw-semibold"><i class="bi bi-flag-fill text-danger me-1"></i>Destino:</div>
+              <div class="fs-5">${ride.destText || '-'}</div>
+            </div>
+            <div class="alert alert-info mb-3 text-center">
+              <i class="bi bi-info-circle-fill me-1"></i><strong>Esperando tu respuesta...</strong>
+            </div>
+            <div class="d-grid gap-2">
+              <button class="btn btn-success btn-lg" id="btnAcceptOffer" style="font-size: 1.3rem; padding: 0.8rem;"><i class="bi bi-check-circle-fill me-2"></i>Aceptar Viaje</button>
+              <button class="btn btn-outline-secondary" id="btnDismissOffer">Rechazar</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(div);
+      div.querySelector('#btnDismissOffer').onclick = () => div.remove();
+      // 🎉 Feedback completo de nuevo viaje
+      playOfferAlert();
+      window.sounds?.newRide();
+      window.haptics?.newRide();
+      window.notifications?.newRideRequest({
+        clientName: 'Cliente',
+        pickup: offer.pickupText || 'Ubicación desconocida'
+      });
+      
+      div.querySelector('#btnAcceptOffer').onclick = async () => {
+        const driverId = (driverIdInput.value.trim()||'taxi-ramallo-1');
+        const driverPhone = (document.getElementById('driverPhone')?.value||'').trim();
+        
+        // 🎯 MEJORA 1 y 2: Obtener ubicación GPS real del conductor ANTES de aceptar
+        let driverLocation = null;
+        if ('geolocation' in navigator) {
+          try {
+            const pos = await new Promise((res, rej) => {
+              navigator.geolocation.getCurrentPosition(res, rej, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+              });
+            });
+            driverLocation = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              accuracy: pos.coords.accuracy
+            };
+          } catch (e) {
+            console.warn('No se pudo obtener GPS al aceptar', e);
+          }
+        }
+        
+        try {
+          const res = await fetch(`/api/rides/${ride.rideId}/accept`, { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body: JSON.stringify({ 
+              driverId, 
+              driverPhone: driverPhone||undefined,
+              driverLocation // Enviar ubicación inicial
+            }) 
+          });
+          if (res.ok) {
+            rideIdInput.value = ride.rideId;
+            // Minimal UI: solo mapa + acciones
+            acceptingOffers = false;
+            standbyBanner.classList.add('d-none');
+            btnStopWait.classList.add('d-none');
+            btnWait.classList.remove('d-none');
+            ridePanel.classList.add('d-none');
+            gpsControls.classList.add('d-none');
+            mapWrap.classList.remove('d-none');
+            actionWrap.classList.remove('d-none');
+            actionBtn.textContent = 'Llegué';
+            phase = 'to_pickup';
+            stopSimulation();
+            
+            // 🎯 MEJORA: Dibujar mapa con ubicación actual y destino
+            await drawRideOnMap(ride.rideId);
+            
+            // Si tenemos GPS, emitir ubicación inicial inmediatamente
+            if (driverLocation) {
+              socket.emit('location', {
+                lat: driverLocation.lat,
+                lng: driverLocation.lng,
+                accuracy: driverLocation.accuracy,
+                heading: null,
+                speed: null,
+                timestamp: Date.now()
+              });
+              currentSimLatLng = [driverLocation.lat, driverLocation.lng];
+            }
+            
+            // Iniciar GPS real
+            try { startSharing(); } catch {}
+            
+            // 🎯 MEJORA: Iniciar ruta OSRM desde ubicación actual
+            const ok = await tryStartOsrmToPickup(ride.rideId, true);
+            if (!ok) { await tryStartOsrmToPickup(ride.rideId); }
+            
+            saveDriverState();
+          } else {
+            const j = await res.json();
+            if (j.error === 'already_taken') alert('Otro chofer lo tomó primero'); else alert('No se pudo aceptar');
+          }
+        } catch (e) {
+          console.error('Error aceptando viaje', e);
+          alert('Error al aceptar el viaje');
+        }
+        div.remove();
+      };
+    }
+
+    // 🎯 Sonido de notificación para nuevo pedido
+    function playNewRideSound() {
+      // Crear beep urgente
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+      
+      // Repetir 3 veces
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.frequency.value = 1000;
+        osc2.type = 'sine';
+        gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        osc2.start();
+        osc2.stop(audioContext.currentTime + 0.5);
+      }, 600);
+      
+      // Vibración
+      try { navigator.vibrate?.([200,100,200,100,200,100,200]); } catch {}
+    }
+    
+    socket.on('ride_offer', (ride) => {
+      console.log('🚨 Nueva oferta de viaje recibida:', ride);
+      console.log('acceptingOffers:', acceptingOffers);
+      console.log('rideIdInput.value:', rideIdInput.value.trim());
+      
+      // if ya estamos en un ride, ignorar
+      if (rideIdInput.value.trim()) {
+        console.log('❌ Ignorando oferta: ya tengo un viaje activo');
+        return;
+      }
+      
+      // only show offers when driver is in waiting mode
+      if (!acceptingOffers) {
+        console.log('❌ Ignorando oferta: no estoy en modo espera');
+        return;
+      }
+      
+      console.log('✅ Mostrando oferta al conductor');
+      
+      // 🎯 SONIDO + VIBRACIÓN
+      playNewRideSound();
+      
+      showOffer(ride);
+    });
+
+    socket.on('ride_taken', ({ rideId }) => {
+      // si mostramos oferta de ese ride, cerrarla
+      const card = document.getElementById('offerCard');
+      if (card && rideIdInput.value.trim() !== rideId) card.parentElement?.remove();
+    });
+
+    // ========== Wizard de estados ==========
+    const order = ['requested','assigned','arriving','arrived','ontrip','completed'];
+    let currentStatus = 'requested';
+    function setCurrentStatus(s) {
+      currentStatus = s;
+      refreshButtons();
+      saveDriverState();
+    }
+    function refreshButtons() {
+      const idx = order.indexOf(currentStatus);
+      document.querySelectorAll('.ride-status').forEach(btn => {
+        const s = btn.getAttribute('data-status');
+        btn.classList.toggle('active', s === currentStatus);
+        // Allow only next logical step or cancel
+        const sIdx = order.indexOf(s);
+        const allowed = (s === currentStatus) || (sIdx === idx + 1) || (s === 'canceled');
+        btn.disabled = !allowed;
+      });
+    }
+    // Initialize wizard state when a rideId is present by fetching ride
+    async function initRideState() {
+      const rid = rideIdInput.value.trim();
+      if (!rid) { refreshButtons(); return; }
+      try {
+        const r = await fetch(`/api/rides/${rid}`);
+        if (r.ok) {
+          const ride = await r.json();
+          setCurrentStatus(ride.status||'requested');
+          // ensure UI reflects active ride
+          mapWrap.classList.remove('d-none');
+          actionWrap.classList.remove('d-none');
+          gpsControls.classList.add('d-none');
+          standbyBanner.classList.add('d-none');
+          await drawRideOnMap(rid);
+          try { startSharing(); } catch {}
+          // Decide phase if not set
+          if (!phase) phase = (ride.status==='arrived'||ride.status==='ontrip') ? 'to_dest' : 'to_pickup';
+          actionBtn.textContent = (phase==='to_pickup') ? 'Llegué' : 'Finalizar';
+          if (phase==='to_pickup') {
+            const ok = await tryStartOsrmToPickup(rid, true); if (!ok) await tryStartOsrmToPickup(rid);
+          } else {
+            await tryStartOsrmToDest(rid);
+          }
+          saveDriverState();
+        }
+      } catch { refreshButtons(); }
+    }
+    initRideState();
+
+    // ========== Simulation utilities ==========
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function buildLinePoints(a, b, steps) {
+      const arr = [];
+      for (let i=0;i<=steps;i++) arr.push({ lat: lerp(a.lat,b.lat,i/steps), lng: lerp(a.lng,b.lng,i/steps) });
+      return arr;
+    }
+    async function fetchRide(rideId) {
+      try { const r = await fetch(`/api/rides/${rideId}`); if (!r.ok) return null; return r.json(); } catch { return null; }
+    }
+    async function waitForCoords(rideId, tries=10) {
+      for (let i=0;i<tries;i++) {
+        const ride = await fetchRide(rideId);
+        if (ride?.pickupCoord && ride?.destCoord) return ride;
+        await new Promise(res=>setTimeout(res, 1000));
+      }
+      return await fetchRide(rideId);
+    }
+    function stopSimulation() { if (simTimer) { clearInterval(simTimer); simTimer=null; } simPoints=[]; simIdx=0; }
+    async function startSimulation(rideId) {
+      stopSimulation();
+      const ride = await waitForCoords(rideId, 12);
+      const a = ride?.pickupCoord; const b = ride?.destCoord;
+      if (!a || !b) return; // no coords
+      // 60 puntos, ~90s de recorrido
+      simPoints = buildLinePoints(a, b, 60);
+      simIdx = 0;
+      simTimer = setInterval(()=>{
+        if (simIdx >= simPoints.length) { stopSimulation(); return; }
+        const p = simPoints[simIdx++];
+        const payload = { lat: p.lat, lng: p.lng, accuracy: 10, heading: 0, speed: 5, timestamp: Date.now() };
+        socket.emit('location', payload);
+        lastSend.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)} (sim)`;
+        currentSimLatLng = [p.lat, p.lng];
+      }, 1500);
+    }
+
+    function stopOsrmSimulation() { if (osrmTimer) { clearInterval(osrmTimer); osrmTimer=null; } osrmIdx=0; osrmLine=[]; }
+    async function startOsrmSimulation(from, to) {
+      stopOsrmSimulation();
+      try {
+        const q = `from=${from.lat},${from.lng}&to=${to.lat},${to.lng}`;
+        const rr = await fetch(`/api/route?${q}`); const jj = await rr.json();
+        const line = (jj.ok && jj.line?.length) ? jj.line : [from, to];
+        osrmLine = line; osrmIdx = 0;
+        // draw on map and fit
+        await ensureDriverMap();
+        dRoute.setLatLngs(line.map(p=>[p.lat,p.lng]));
+        
+        // 🎯 ETAPA 2: Zoom automático mostrando conductor + destino
+        const bnds = L.latLngBounds(line.map(p=>[p.lat,p.lng]));
+        dMap.fitBounds(bnds.pad(0.25), { animate: true, duration: 0.8 });
+        
+        let lastFitTime = Date.now();
+        osrmTimer = setInterval(()=>{
+          if (osrmIdx >= osrmLine.length) { stopOsrmSimulation(); return; }
+          const p = osrmLine[osrmIdx++];
+          const payload = { lat: p.lat, lng: p.lng, accuracy: 10, heading: 0, speed: 6, timestamp: Date.now() };
+          socket.emit('location', payload);
+          lastSend.textContent = `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)} (sim OSRM)`;
+          currentSimLatLng = [p.lat, p.lng];
+          if (dMap) {
+            const latlng = [p.lat, p.lng];
+            if (!dMarker) dMarker = L.marker(latlng).addTo(dMap); else dMarker.setLatLng(latlng);
+            
+            // 🎯 ETAPA 2: Re-ajustar zoom cada 10 segundos para mantener visible conductor + destino
+            const now = Date.now();
+            if (now - lastFitTime > 10000) {
+              const pts = [latlng];
+              if (dPickup) pts.push(dPickup.getLatLng());
+              if (dDest) pts.push(dDest.getLatLng());
+              if (pts.length > 1) {
+                try {
+                  dMap.fitBounds(L.latLngBounds(pts).pad(0.3), { animate: true, duration: 0.5 });
+                  lastFitTime = now;
+                } catch {}
+              }
+            } else {
+              maybeFollow(latlng);
+            }
+          }
+        }, 1200);
+        return true;
+      } catch { return false; }
+    }
+    async function tryStartOsrmToPickup(rideId, preferGPS=false) {
+      const r = await fetch(`/api/rides/${rideId}`); if (!r.ok) return false; const ride = await r.json();
+      if (!ride.pickupCoord) return false;
+      let origin = null;
+      
+      // 🎯 FIX: Prioridad correcta para origen
+      // 1. GPS real (si preferGPS=true)
+      if (preferGPS && 'geolocation' in navigator) {
+        try {
+          const pos = await new Promise((res,rej)=> navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy:true, timeout:4000, maximumAge:1000 }));
+          origin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          console.log('✅ Usando GPS real como origen:', origin);
+        } catch (e) {
+          console.warn('⚠️ No se pudo obtener GPS:', e);
+        }
+      }
+      
+      // 2. Ubicación guardada cuando aceptó
+      if (!origin && currentSimLatLng) {
+        origin = { lat: currentSimLatLng[0], lng: currentSimLatLng[1] };
+        console.log('✅ Usando ubicación guardada como origen:', origin);
+      }
+      
+      // 3. Último marcador en mapa
+      if (!origin && dMarker) { 
+        const ll = dMarker.getLatLng(); 
+        origin = { lat: ll.lat, lng: ll.lng }; 
+        console.log('✅ Usando marcador del mapa como origen:', origin);
+      }
+      
+      // 4. Ubicación de conductor guardada en ride
+      if (!origin && ride.lastLocation) {
+        origin = { lat: ride.lastLocation.lat, lng: ride.lastLocation.lng };
+        console.log('✅ Usando lastLocation del ride como origen:', origin);
+      }
+      
+      // 5. 🎯 FIX: NO usar fallback - debe tener ubicación real
+      if (!origin) {
+        console.error('❌ No se pudo determinar ubicación del conductor. Necesita GPS o ubicación guardada.');
+        alert('⚠️ No se pudo obtener tu ubicación. Asegurate de tener GPS activado.');
+        return false;
+      }
+      
+      console.log('🚕 Iniciando ruta desde', origin, 'hacia pickup', ride.pickupCoord);
+      return startOsrmSimulation(origin, ride.pickupCoord);
+    }
+    async function tryStartOsrmToDest(rideId) {
+      const r = await fetch(`/api/rides/${rideId}`); if (!r.ok) return false; const ride = await r.json();
+      if (!(ride.pickupCoord && ride.destCoord)) return false;
+      return startOsrmSimulation(ride.pickupCoord, ride.destCoord);
+    }
+
+    // Action button phases: Llegué -> Finalizar
+    actionBtn.addEventListener('click', async () => {
+      const rid = rideIdInput.value.trim(); if (!rid) return;
+      if (phase === 'to_pickup') {
+        // 🎯 ETAPA 3: Cambiar a fase destino
+        console.log('✅ Conductor marcó LLEGUÉ. Cambiando a ruta pickup → destino');
+        
+        // Notify status arrived and switch to dest leg
+        try { await postJSON(`/api/rides/${rid}/status`, { status: 'arrived' }); } catch {}
+        phase = 'to_dest';
+        actionBtn.textContent = 'Finalizar';
+        playArrivedBeep();
+        followOn = true;
+        
+        // 🎯 ETAPA 3: Actualizar mapa para mostrar pickup → destino
+        await drawRideOnMap(rid);
+        
+        // 🎯 ETAPA 3: Marcar como "en viaje" al destino
+        try { await postJSON(`/api/rides/${rid}/status`, { status: 'ontrip' }); } catch {}
+        
+        await tryStartOsrmToDest(rid);
+        
+        saveDriverState();
+      } else if (phase === 'to_dest') {
+        try { await postJSON(`/api/rides/${rid}/status`, { status: 'completed' }); } catch {}
+        actionBtn.disabled = true;
+        stopOsrmSimulation();
+        stopSimulation();
+        followOn = false;
+        playCompletedBeep();
+        
+        // 🎯 Incrementar estadísticas del día
+        incrementTrip(500); // $500 por viaje
+        
+        // 🎉 Feedback completo de viaje finalizado
+        window.toast?.success('🎉 Viaje finalizado!\n\n+$500 agregados a tus ganancias');
+        window.sounds?.completed();
+        window.haptics?.success();
+        
+        saveDriverState();
+      }
+    });
+
+    cancelBtn.addEventListener('click', async () => {
+      const rid = rideIdInput.value.trim(); if (!rid) return;
+      try { await postJSON(`/api/rides/${rid}/status`, { status: 'canceled' }); } catch {}
+      stopOsrmSimulation(); stopSimulation();
+      actionBtn.disabled = true; cancelBtn.disabled = true;
+      alert('Viaje cancelado');
+      phase = null; saveDriverState();
+    });
+  </script>
+</body>
+</html>

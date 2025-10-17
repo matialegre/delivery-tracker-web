@@ -1,0 +1,1035 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pedir Remís | Ramallo Taxi Tracker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Core Systems -->
+  <script src="/config.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/analytics.js"></script>
+  <!-- UX Systems -->
+  <script src="/toast.js"></script>
+  <script src="/haptics.js"></script>
+  <script src="/sounds.js"></script>
+  <script src="/connection.js"></script>
+  <script src="/theme.js"></script>
+  <script src="/notifications.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/tutorial.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: #fff;
+      color: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      overflow: hidden;
+    }
+    
+    /* 🎯 MAPA FULLSCREEN tipo Uber */
+    #previewMap { 
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      z-index: 1;
+    }
+    
+    /* 🎯 PANEL LATERAL IZQUIERDO tipo Uber Desktop */
+    #requestPanel {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 400px;
+      height: 100vh;
+      background: #fff;
+      box-shadow: 2px 0 20px rgba(0,0,0,0.1);
+      z-index: 1000;
+      overflow-y: auto;
+      padding: 32px 24px;
+      animation: slideInLeft 0.4s ease-out;
+    }
+    
+    @keyframes slideInLeft {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+    
+    /* Handle para arrastrar - OCULTO en desktop */
+    .panel-handle {
+      display: none;
+    }
+    
+    /* Ajustar mapa para dejar espacio al panel */
+    #previewMap {
+      left: 400px;
+      width: calc(100% - 400px);
+    }
+    
+    /* 🎯 TAXI COUNTER - Flotante arriba MEJORADO */
+    #taxiCounterBadge {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #000 0%, #333 100%);
+      padding: 14px 28px;
+      border-radius: 30px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+      z-index: 1001;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: fadeInDown 0.5s ease-out, pulse 2s infinite;
+      color: #fff;
+    }
+    
+    /* Loading animation para GPS */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .loading-gps {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    /* Efecto ripple para botones */
+    @keyframes ripple {
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+    
+    .btn-uber::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      background: rgba(255,255,255,0.5);
+      opacity: 0;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    .btn-uber:active::after {
+      animation: ripple 0.6s ease-out;
+    }
+    
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translate(-50%, -20px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+    
+    /* 🎯 Inputs tipo Uber MEJORADOS */
+    .form-control {
+      background: #f7f7f7;
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 16px;
+      color: #000;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 2px solid transparent;
+    }
+    
+    .form-control:focus {
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.1);
+      outline: none;
+      border-color: #000;
+      transform: translateY(-2px);
+    }
+    
+    .form-control:hover:not(:focus) {
+      background: #fff;
+    }
+    
+    /* Validación visual */
+    .form-control.valid {
+      border-color: #10b981;
+      background: #f0fdf4;
+    }
+    
+    .form-control.invalid {
+      border-color: #ef4444;
+      background: #fef2f2;
+      animation: shake 0.5s;
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+    
+    .error-message {
+      color: #ef4444;
+      font-size: 12px;
+      margin-top: 4px;
+      display: none;
+    }
+    
+    .error-message.show {
+      display: block;
+      animation: slideDown 0.3s;
+    }
+    
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Skeleton loading */
+    @keyframes shimmer {
+      0% { background-position: -1000px 0; }
+      100% { background-position: 1000px 0; }
+    }
+    
+    .skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 1000px 100%;
+      animation: shimmer 2s infinite;
+      border-radius: 8px;
+    }
+    
+    .form-control::placeholder {
+      color: #999;
+    }
+    
+    /* 🎯 Botones grandes tipo Uber */
+    .btn-uber {
+      background: #000;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 18px;
+      font-size: 18px;
+      font-weight: 600;
+      width: 100%;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .btn-uber:hover {
+      background: #222;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
+    
+    .btn-uber:active {
+      transform: translateY(0);
+    }
+    
+    .btn-gps {
+      background: #fff;
+      border: 2px solid #000;
+      color: #000;
+      border-radius: 12px;
+      padding: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-gps:hover {
+      background: #f7f7f7;
+    }
+    
+    /* 🎯 Títulos */
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #000;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    
+    /* 🎯 Labels */
+    .form-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #000;
+      margin-bottom: 8px;
+      display: block;
+    }
+    
+    /* 🎯 Sugerencias de autocompletado */
+    .list-group {
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .list-group-item {
+      border: none;
+      border-bottom: 1px solid #f0f0f0;
+      padding: 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .list-group-item:hover {
+      background: #f7f7f7;
+    }
+    
+    /* 🎯 Input group */
+    .input-group {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .input-group .form-control {
+      flex: 1;
+    }
+    
+    /* 🎯 Espaciado */
+    .mb-3 { margin-bottom: 16px; }
+    .mb-4 { margin-bottom: 24px; }
+    .gap-2 { gap: 8px; }
+    
+    /* 🎯 Grid responsivo */
+    .row { display: flex; flex-wrap: wrap; gap: 16px; }
+    .col-12 { flex: 0 0 100%; }
+    .col-md-6 { flex: 0 0 100%; }
+    
+    /* 🎯 RESPONSIVE - Móvil: panel inferior / Desktop: panel lateral */
+    @media (max-width: 768px) {
+      #previewMap {
+        left: 0 !important;
+        width: 100% !important;
+      }
+      
+      #requestPanel {
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: auto;
+        max-height: 70vh;
+        border-radius: 20px 20px 0 0;
+        padding: 24px;
+        animation: slideUp 0.4s ease-out;
+      }
+      
+      @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
+      
+      .panel-handle {
+        display: block;
+        width: 40px;
+        height: 5px;
+        background: #ddd;
+        border-radius: 3px;
+        margin: 0 auto 20px;
+      }
+      
+      .col-md-6 { flex: 0 0 100%; }
+    }
+    
+    @media (min-width: 769px) {
+      .col-md-6 { flex: 0 0 calc(50% - 8px); }
+      
+      #taxiCounterBadge {
+        left: calc(400px + 50%);
+        transform: translate(-50%, 0);
+      }
+    }
+    
+    /* 🎯 Ocultar navbar */
+    .navbar { display: none; }
+  </style>
+</head>
+<body>
+  <!-- 🎯 MAPA FULLSCREEN -->
+  <div id="previewMap"></div>
+  
+  <!-- 🎯 CONTADOR DE TAXIS - Badge flotante PREMIUM -->
+  <div id="taxiCounterBadge">
+    <span class="pulse" style="font-size: 28px;">🚕</span>
+    <div>
+      <div id="taxiCount" style="font-size: 14px; font-weight: 700;">Buscando taxis...</div>
+      <div id="taxiSubtext" style="font-size: 11px; opacity: 0.7;">Detectando ubicación...</div>
+    </div>
+  </div>
+  
+  <!-- 🎯 PANEL FLOTANTE tipo Uber -->
+  <div id="requestPanel">
+    <div class="panel-handle"></div>
+    
+    <h1>¿A dónde vas?</h1>
+    <p class="subtitle">Elegí tu ubicación y destino</p>
+    
+    <!-- 📍 LUGARES FAVORITOS -->
+    <div id="favoritesSection" style="margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 600; font-size: 14px;">📍 Lugares frecuentes</span>
+        <button type="button" id="addFavoriteBtn" style="background: none; border: none; color: #000; font-size: 20px; cursor: pointer;">+</button>
+      </div>
+      <div id="favoritesList" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;"></div>
+    </div>
+            
+    <form id="frm">
+      <div class="mb-3">
+        <label class="form-label">Tu nombre</label>
+        <input id="riderName" class="form-control" placeholder="Matías Alegre" />
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">📍 Desde</label>
+        <div class="input-group">
+          <input id="pickupText" class="form-control" placeholder="¿Dónde estás?" autocomplete="off" required />
+          <button id="btnMyLocation" class="btn-gps" type="button" title="Usar GPS">
+            <i class="bi bi-crosshair"></i>
+          </button>
+        </div>
+        <div id="pickupSuggestions" class="list-group" style="position: absolute; z-index: 2000; width: calc(100% - 48px); margin-top: 4px; display: none;"></div>
+      </div>
+      
+      <div class="mb-3">
+        <label class="form-label">🎯 Hasta</label>
+        <input id="destText" class="form-control" placeholder="¿A dónde vas?" autocomplete="off" />
+        <div id="destSuggestions" class="list-group" style="position: absolute; z-index: 2000; width: calc(100% - 48px); margin-top: 4px; display: none;"></div>
+      </div>
+      
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <label class="form-label">📱 Teléfono</label>
+          <input id="phone" class="form-control" placeholder="Tu número" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">🆘 Emergencia</label>
+          <input id="emergencyContact" class="form-control" placeholder="+549..." />
+        </div>
+      </div>
+      
+      <div class="mb-4">
+        <!-- 💰 Precio estimado -->
+        <div id="priceEstimate" style="display: none; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+          <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">💰 Precio estimado</div>
+          <div style="font-size: 32px; font-weight: 800;" id="priceAmount">$0</div>
+          <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;" id="priceDistance">Distancia: 0 km</div>
+        </div>
+        
+        <button class="btn-uber" type="submit">
+          <i class="bi bi-lightning-charge-fill"></i> Pedir remís ahora
+        </button>
+      </div>
+    </form>
+    
+    <div id="result" style="display: none;">
+      <div style="background: #000; color: #fff; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+        ✅ ¡Listo! Pedido <strong id="rid"></strong>
+      </div>
+      <a id="trackLink" class="btn-uber" target="_blank" style="margin-bottom: 12px; display: block;">
+        <i class="bi bi-eye"></i> Ver seguimiento en vivo
+      </a>
+    </div>
+  </div>
+
+  <script>
+    const frm = document.getElementById('frm');
+    const pickupText = document.getElementById('pickupText');
+    const riderName = document.getElementById('riderName');
+    const destText = document.getElementById('destText');
+    const phone = document.getElementById('phone');
+    const emergencyContact = document.getElementById('emergencyContact');
+    const resultBox = document.getElementById('result');
+    const ridOut = document.getElementById('rid');
+    const trackLink = document.getElementById('trackLink');
+    const btnMyLocation = document.getElementById('btnMyLocation');
+    const pickupSuggestions = document.getElementById('pickupSuggestions');
+    const destSuggestions = document.getElementById('destSuggestions');
+    const taxiCount = document.getElementById('taxiCount');
+
+    // 🎯 VALIDACIÓN ESTRICTA: Flag para verificar que usó GPS
+    let gpsLocationObtained = false;
+    
+    // 🎯 NUEVO: Mapa de preview con taxis disponibles
+    const previewMap = L.map('previewMap').setView([-33.4847, -60.0062], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: ' OpenStreetMap'
+    }).addTo(previewMap);
+    
+    // Marcador de mi ubicación
+    let myLocationMarker = null;
+    let myLocationCircle = null;
+    
+    // Marcadores de taxis disponibles
+    let taxiMarkers = [];
+    
+    // Socket.IO para taxis en tiempo real
+    const socket = io();
+    
+    // 🎯 GPS continuo para mejor precisión (como Uber)
+    let gpsWatchId = null;
+    let firstGpsUpdate = true;
+    
+    if ('geolocation' in navigator) {
+      gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+          const latlng = [lat, lng];
+          
+          console.log(`📍 GPS: lat=${lat.toFixed(5)}, lng=${lng.toFixed(5)}, precisión=${Math.round(accuracy)}m`);
+          
+          // 🎯 Actualizar subtexto con precisión
+          const taxiSubtext = document.getElementById('taxiSubtext');
+          if (accuracy < 50) {
+            taxiSubtext.textContent = `✓ Ubicación precisa (${Math.round(accuracy)}m)`;
+            taxiSubtext.style.color = '#4ade80';
+          } else if (accuracy < 200) {
+            taxiSubtext.textContent = `Precisión: ${Math.round(accuracy)}m`;
+            taxiSubtext.style.color = '#fbbf24';
+          } else {
+            taxiSubtext.textContent = `⚠️ Precisión baja (${Math.round(accuracy)}m)`;
+            taxiSubtext.style.color = '#f87171';
+          }
+          
+          // Warning si la precisión es muy mala
+          if (accuracy > 500 && firstGpsUpdate) {
+            console.warn('⚠️ GPS muy impreciso - Mejor usar desde celular');
+          }
+          
+          // Marcador con ícono personalizado
+          const myIcon = L.divIcon({ 
+            className: '', 
+            html: '<div style="background:#0dcaf0;border:4px solid #fff;border-radius:50%;width:28px;height:28px;box-shadow:0 0 15px rgba(13,202,240,0.8);"></div>', 
+            iconSize: [28, 28], 
+            iconAnchor: [14, 14] 
+          });
+          
+          // Actualizar o crear marcador
+          if (!myLocationMarker) {
+            myLocationMarker = L.marker(latlng, { icon: myIcon, title: 'Tu ubicación', zIndexOffset: 1000 }).addTo(previewMap);
+          } else {
+            myLocationMarker.setLatLng(latlng);
+          }
+          
+          // 🎯 Círculo de precisión más sutil
+          const radius = Math.min(accuracy || 50, 300);
+          const opacity = accuracy > 100 ? 0.25 : 0.15; // Más transparente si es poco preciso
+          
+          if (!myLocationCircle) {
+            myLocationCircle = L.circle(latlng, { 
+              radius, 
+              color: '#0dcaf0', 
+              fillColor: '#0dcaf0', 
+              fillOpacity: opacity,
+              weight: accuracy > 100 ? 1 : 2
+            }).addTo(previewMap);
+          } else {
+            myLocationCircle.setLatLng(latlng);
+            myLocationCircle.setRadius(radius);
+            myLocationCircle.setStyle({ 
+              fillOpacity: opacity,
+              weight: accuracy > 100 ? 1 : 2
+            });
+          }
+          
+          // 🎯 Actualizar centro según precisión
+          if (firstGpsUpdate) {
+            // Primera vez: centrar con zoom 15
+            previewMap.setView(latlng, 15, { animate: true, duration: 1 });
+            firstGpsUpdate = false;
+          } else {
+            // 🎯 MEJORA: SIEMPRE actualizar posición suavemente
+            previewMap.panTo(latlng, { animate: true, duration: 0.3 });
+            
+            // Si la precisión mejoró mucho, ajustar zoom
+            if (accuracy < 30 && previewMap.getZoom() < 16) {
+              previewMap.setZoom(16, { animate: true });
+            }
+          }
+        },
+        (err) => {
+          console.warn('⚠️ Error GPS:', err);
+          taxiCount.textContent = 'Permitinos acceder a tu ubicación para ver taxis cerca';
+          taxiCount.className = 'text-warning';
+        },
+        { 
+          enableHighAccuracy: true, 
+          timeout: 15000, 
+          maximumAge: 2000 // 🎯 Actualizar cada 2s para mayor precisión
+        }
+      );
+    }
+    
+    // 🎯 Obtener y mostrar taxis disponibles
+    async function updateTaxisOnMap() {
+      try {
+        const res = await fetch('/api/drivers');
+        const json = await res.json();
+        
+        console.log('🚕 Respuesta de /api/drivers:', json);
+        
+        if (!json.ok || !json.drivers) {
+          console.warn('⚠️ No se recibieron conductores');
+          return;
+        }
+        
+        // Limpiar marcadores viejos
+        taxiMarkers.forEach(m => previewMap.removeLayer(m));
+        taxiMarkers = [];
+        
+        // Ícono de taxi
+        const taxiIcon = L.divIcon({
+          className: '',
+          html: '<div style="font-size:28px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">🚕</div>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        });
+        
+        console.log(`📍 Agregando ${json.drivers.length} taxis al mapa`);
+        json.drivers.forEach(driver => {
+          if (!driver.lat || !driver.lng) {
+            console.warn('⚠️ Conductor sin coordenadas:', driver);
+            return;
+          }
+          console.log(`  ✅ Taxi en ${driver.lat.toFixed(5)}, ${driver.lng.toFixed(5)}`);
+          const marker = L.marker([driver.lat, driver.lng], { 
+            icon: taxiIcon, 
+            title: `Taxi disponible`,
+            opacity: 0.8
+          }).addTo(previewMap);
+          taxiMarkers.push(marker);
+        });
+        
+        // Actualizar contador
+        const count = taxiMarkers.length;
+        if (count === 0) {
+          taxiCount.textContent = 'No hay taxis conectados en este momento';
+          taxiCount.className = 'text-warning';
+          taxiCount.title = 'Esperá a que un conductor se conecte o probá más tarde';
+        } else if (count === 1) {
+          taxiCount.textContent = '1 taxi disponible';
+          taxiCount.className = 'text-success';
+        } else {
+          taxiCount.textContent = `${count} taxis disponibles`;
+          taxiCount.className = 'text-success';
+        }
+        
+        console.log(` 🚕 ${count} taxis disponibles en el mapa`);
+      } catch (e) {
+        console.error('Error obteniendo taxis:', e);
+        taxiCount.textContent = 'Error al buscar taxis';
+      }
+    }
+    
+    // Actualizar taxis cada 5 segundos
+    updateTaxisOnMap();
+    setInterval(updateTaxisOnMap, 5000);
+    
+    // 📍 LUGARES FAVORITOS
+    const favoritesList = document.getElementById('favoritesList');
+    const addFavoriteBtn = document.getElementById('addFavoriteBtn');
+    
+    function loadFavorites() {
+      const favorites = JSON.parse(localStorage.getItem('favoriteLocations') || '[]');
+      favoritesList.innerHTML = '';
+      
+      favorites.forEach((fav, index) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.style.cssText = 'padding: 8px 16px; background: #f0f0f0; border: none; border-radius: 20px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px; transition: all 0.2s;';
+        chip.innerHTML = `${fav.icon} ${fav.name}`;
+        chip.onmouseover = () => chip.style.background = '#e0e0e0';
+        chip.onmouseout = () => chip.style.background = '#f0f0f0';
+        chip.onclick = () => {
+          pickupText.value = fav.address;
+          if (fav.lat && fav.lng) {
+            // Centrar mapa en favorito
+            previewMap.setView([fav.lat, fav.lng], 15);
+          }
+        };
+        favoritesList.appendChild(chip);
+      });
+    }
+    
+    addFavoriteBtn.addEventListener('click', () => {
+      const address = pickupText.value.trim() || destText.value.trim();
+      if (!address) {
+        toast.warning('Escribí una dirección primero');
+        return;
+      }
+      
+      const name = prompt('¿Cómo querés llamar a este lugar?', 'Casa');
+      if (!name) return;
+      
+      const icon = prompt('Elegí un emoji:', '🏠');
+      
+      const favorites = JSON.parse(localStorage.getItem('favoriteLocations') || '[]');
+      favorites.push({
+        name,
+        icon: icon || '📍',
+        address,
+        lat: myLocationMarker ? myLocationMarker.getLatLng().lat : null,
+        lng: myLocationMarker ? myLocationMarker.getLatLng().lng : null
+      });
+      
+      localStorage.setItem('favoriteLocations', JSON.stringify(favorites));
+      loadFavorites();
+      toast.success('Lugar guardado en favoritos!');
+      window.sounds?.success();
+      window.haptics?.success();
+    });
+    
+    // Cargar favoritos al inicio
+    loadFavorites();
+    
+    // 💰 CALCULAR PRECIO basado en distancia
+    let selectedPickupCoords = null;
+    let selectedDestCoords = null;
+    const priceEstimateDiv = document.getElementById('priceEstimate');
+    const priceAmount = document.getElementById('priceAmount');
+    const priceDistance = document.getElementById('priceDistance');
+    
+    function calculatePrice(lat1, lng1, lat2, lng2) {
+      // Fórmula de Haversine para calcular distancia
+      const R = 6371; // Radio de la Tierra en km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const distance = R * c;
+      
+      // Tarifa: $300 base + $150 por km
+      const basePrice = 300;
+      const pricePerKm = 150;
+      const totalPrice = Math.round(basePrice + (distance * pricePerKm));
+      
+      return { distance: distance.toFixed(1), price: totalPrice };
+    }
+    
+    function updatePriceEstimate() {
+      if (selectedPickupCoords && selectedDestCoords) {
+        const { distance, price } = calculatePrice(
+          selectedPickupCoords.lat, 
+          selectedPickupCoords.lng,
+          selectedDestCoords.lat,
+          selectedDestCoords.lng
+        );
+        
+        priceAmount.textContent = `$${price}`;
+        priceDistance.textContent = `Distancia: ${distance} km`;
+        priceEstimateDiv.style.display = 'block';
+        
+        // Guardar para enviar con el pedido
+        window.estimatedPrice = price;
+      } else {
+        priceEstimateDiv.style.display = 'none';
+      }
+    }
+    
+    // 🎯 Forzar redibujado correcto del mapa
+    setTimeout(() => {
+      previewMap.invalidateSize();
+    }, 300);
+    
+    // 🎯 AUTOCOMPLETADO: Sistema de sugerencias con Nominatim
+    let selectedValidAddress = false;
+    let selectedValidDest = false;
+    let debounceTimerPickup = null;
+    let debounceTimerDest = null;
+    let lastSelectedCoords = null;
+
+    // Debounced search - PICKUP
+    pickupText.addEventListener('input', () => {
+      selectedValidAddress = false; // Reset al escribir
+      pickupText.classList.remove('is-valid', 'is-invalid');
+      const query = pickupText.value.trim();
+      
+      if (query.length < 3) {
+        pickupSuggestions.style.display = 'none';
+        return;
+      }
+      
+      clearTimeout(debounceTimerPickup);
+      debounceTimerPickup = setTimeout(() => searchAddress(query, 'pickup'), 500);
+    });
+
+    // Debounced search - DESTINO
+    destText.addEventListener('input', () => {
+      selectedValidDest = false;
+      destText.classList.remove('is-valid', 'is-invalid');
+      const query = destText.value.trim();
+      
+      if (query.length < 3) {
+        destSuggestions.style.display = 'none';
+        return;
+      }
+      
+      clearTimeout(debounceTimerDest);
+      debounceTimerDest = setTimeout(() => searchAddress(query, 'dest'), 500);
+    });
+
+    async function searchAddress(query, type = 'pickup') {
+      const isPickup = type === 'pickup';
+      const container = isPickup ? pickupSuggestions : destSuggestions;
+      const inputField = isPickup ? pickupText : destText;
+      
+      // 🎯 FIX: Mostrar "Cargando..."
+      container.innerHTML = '<div class="list-group-item text-center"><span class="spinner-border spinner-border-sm me-2"></span>Buscando direcciones...</div>';
+      container.style.display = 'block';
+      
+      try {
+        // 🎯 MEJORA: Agregar ciudad automáticamente si no la tiene
+        let searchQuery = query;
+        if (!query.toLowerCase().includes('bahia') && !query.toLowerCase().includes('blanca') && !query.toLowerCase().includes('ramallo')) {
+          searchQuery = `${query}, Bahía Blanca, Buenos Aires`;
+        }
+        
+        // 🎯 MEJORA: Aumentar límite a 15 resultados
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=ar&limit=15&addressdetails=1`;
+        const r = await fetch(url, { headers: { 'User-Agent': 'TuRemis/1.0' } });
+        const results = await r.json();
+        
+        if (!results || results.length === 0) {
+          container.innerHTML = '<div class="list-group-item text-secondary"><i class="bi bi-x-circle me-2"></i>No se encontraron direcciones</div>';
+          container.style.display = 'block';
+          return;
+        }
+        
+        container.innerHTML = '';
+        results.forEach(result => {
+          const item = document.createElement('a');
+          item.className = 'list-group-item list-group-item-action';
+          item.style.cursor = 'pointer';
+          
+          // Construir dirección legible
+          const addr = result.address || {};
+          let displayAddr = '';
+          if (addr.road) {
+            displayAddr = addr.road;
+            if (addr.house_number) displayAddr += ' ' + addr.house_number;
+            if (addr.city || addr.town) displayAddr += ', ' + (addr.city || addr.town);
+          } else {
+            displayAddr = result.display_name;
+          }
+          
+          item.innerHTML = `
+            <div class="d-flex align-items-start">
+              <i class="bi bi-geo-alt-fill text-primary me-2 mt-1"></i>
+              <div>
+                <div>${displayAddr}</div>
+                <small class="text-secondary">${result.display_name}</small>
+              </div>
+            </div>
+          `;
+          
+          item.addEventListener('click', () => {
+            inputField.value = displayAddr;
+            
+            // 💰 Guardar coordenadas para cálculo de precio
+            const coords = { lat: parseFloat(result.lat), lng: parseFloat(result.lon) };
+            if (isPickup) {
+              selectedValidAddress = true;
+              selectedPickupCoords = coords;
+            } else {
+              selectedValidDest = true;
+              selectedDestCoords = coords;
+            }
+            
+            // Calcular precio si tenemos ambas coordenadas
+            updatePriceEstimate();
+            
+            container.style.display = 'none';
+            container.innerHTML = '';
+          });
+          
+          container.appendChild(item);
+        });
+        
+        container.style.display = 'block';
+      } catch (e) {
+        console.error('Error buscando direcciones', e);
+        container.style.display = 'none';
+      }
+    }
+
+    // Cerrar sugerencias al hacer click fuera
+    document.addEventListener('click', (e) => {
+      if (!pickupText.contains(e.target) && !pickupSuggestions.contains(e.target)) {
+        pickupSuggestions.style.display = 'none';
+      }
+      if (!destText.contains(e.target) && !destSuggestions.contains(e.target)) {
+        destSuggestions.style.display = 'none';
+      }
+    });
+
+    // 🎯 MEJORA 3: Auto-fill pickup con dirección completa y legible
+    btnMyLocation.addEventListener('click', async () => {
+      if (!('geolocation' in navigator)) { toast.error('Geolocalización no disponible'); return; }
+      btnMyLocation.disabled = true;
+      btnMyLocation.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Ubicando...';
+      try {
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { 
+          enableHighAccuracy: true, 
+          timeout: 10000,
+          maximumAge: 0
+        }));
+        const { latitude: lat, longitude: lng } = pos.coords;
+        
+        // Reverse geocode con más detalle
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&zoom=18`;
+        const r = await fetch(url, { headers: { 'User-Agent': 'TuRemis/1.0' } });
+        const data = await r.json();
+        
+        // 🎯 MEJORA: Construir dirección legible con calle, número, ciudad
+        let addr = '';
+        const a = data?.address || {};
+        
+        // Prioridad: calle + número
+        if (a.road) {
+          addr = a.road;
+          if (a.house_number) addr += ' ' + a.house_number;
+        } else if (a.suburb || a.neighbourhood) {
+          addr = a.suburb || a.neighbourhood;
+        } else if (a.city || a.town || a.village) {
+          addr = a.city || a.town || a.village;
+        }
+        
+        // Agregar ciudad si no está
+        if (addr && (a.city || a.town || a.village)) {
+          const city = a.city || a.town || a.village;
+          if (!addr.includes(city)) {
+            addr += ', ' + city;
+          }
+        }
+        
+        // Fallback a display_name o coordenadas
+        if (!addr) {
+          addr = data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        }
+        
+        pickupText.value = addr;
+        selectedValidAddress = true; // ✅ Marcar como válido (GPS o sugerencia)
+        lastSelectedCoords = { lat, lng };
+        btnMyLocation.innerHTML = '<i class=\"bi bi-check-circle-fill\"></i> GPS OK';
+        btnMyLocation.classList.remove('btn-outline-primary', 'btn-primary');
+        btnMyLocation.classList.add('btn-success');
+        pickupText.classList.add('is-valid');
+        pickupText.classList.remove('is-invalid');
+      } catch (e) {
+        console.error('Error obteniendo ubicación', e);
+        toast.error('No se pudo obtener tu ubicación. Asegurate de dar permisos.');
+        btnMyLocation.disabled = false;
+        btnMyLocation.innerHTML = '<i class=\"bi bi-geo-alt-fill\"></i> Mi ubicación';
+      }
+    });
+    
+    frm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      // 🎯 VALIDACIÓN: Debe elegir una dirección real (GPS o de las sugerencias)
+      if (!selectedValidAddress || !pickupText.value.trim()) {
+        toast.warning('Elegí una dirección de las sugerencias o usá el botón GPS');
+        window.sounds?.warning();
+        window.haptics?.warning();
+        pickupText.classList.add('is-invalid');
+        pickupText.classList.remove('is-valid');
+        pickupText.focus();
+        return;
+      }
+      
+      // Si puso destino, también debe ser válido
+      if (destText.value.trim() && !selectedValidDest) {
+        toast.warning('El destino debe ser elegido de las sugerencias');
+        window.sounds?.warning();
+        window.haptics?.warning();
+        destText.classList.add('is-invalid');
+        destText.classList.remove('is-valid');
+        destText.focus();
+        return;
+      }
+      
+      const body = { 
+        pickupText: pickupText.value.trim(), 
+        destText: destText.value.trim(), 
+        phone: phone.value.trim(), 
+        name: riderName.value.trim(),
+        emergencyContact: emergencyContact.value.trim()
+      };
+      const res = await fetch('/api/rides', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!data.ok) { 
+        toast.error('No se pudo crear el pedido');
+        window.sounds?.error();
+        window.haptics?.error();
+        return;
+      }
+      
+      // 🎵 Sonido de éxito
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.2);
+        
+        setTimeout(() => {
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          osc2.frequency.value = 1000;
+          osc2.type = 'sine';
+          gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          osc2.start();
+          osc2.stop(audioCtx.currentTime + 0.3);
+        }, 100);
+      } catch {}
+      
+      // Mostrar resultado
+      ridOut.textContent = data.rideId;
+      trackLink.href = data.trackUrl;
+      resultBox.style.display = 'block';
+      frm.style.display = 'none';
+      
+      // 🎉 Feedback de éxito completo
+      window.toast?.success('¡Pedido creado exitosamente!');
+      window.haptics?.success();
+      
+      // Redirigir después de 2 segundos
+      setTimeout(() => {
+        location.href = data.trackUrl;
+      }, 2000);
+    });
+  </script>
+</body>
+</html>

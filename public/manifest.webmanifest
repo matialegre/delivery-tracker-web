@@ -1,0 +1,51 @@
+{
+  "name": "TuRemis - Sistema de Remises",
+  "short_name": "TuRemis",
+  "description": "Sistema completo de remises con seguimiento en tiempo real, chat, rating y más",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["travel", "transportation", "navigation"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Pedir Remis",
+      "short_name": "Pedir",
+      "description": "Solicitar un viaje rápidamente",
+      "url": "/request.html",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Modo Conductor",
+      "short_name": "Conductor",
+      "description": "Panel del conductor",
+      "url": "/driver.html",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Historial",
+      "short_name": "Historial",
+      "description": "Ver historial de viajes",
+      "url": "/history.html",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

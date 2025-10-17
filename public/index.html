@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ramallo Taxi Tracker</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Core Systems -->
+  <script src="/config.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/analytics.js"></script>
+  <!-- UX Systems -->
+  <script src="/toast.js"></script>
+  <script src="/haptics.js"></script>
+  <script src="/sounds.js"></script>
+  <script src="/connection.js"></script>
+  <script src="/theme.js"></script>
+  <script src="/notifications.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/shortcuts.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      overflow-x: hidden;
+    }
+    
+    /* 🎯 Mapa de fondo animado - MÁS VISIBLE */
+    #bgMap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      z-index: 0;
+      opacity: 0.6; /* Más visible */
+      filter: brightness(0.5); /* Sin blur */
+    }
+    
+    /* Contenedor principal */
+    .content {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+    }
+    
+    /* Hero con glassmorphism - MÁS LIMPIO */
+    .hero-glass {
+      background: rgba(0, 0, 0, 0.7); /* Más sólido, menos confuso */
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 40px;
+      margin: 100px auto;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      animation: fadeInUp 0.6s ease-out;
+    }
+    
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    h1 {
+      font-size: 48px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #fff 0%, #999 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+    }
+    
+    .subtitle {
+      color: rgba(255,255,255,0.7);
+      font-size: 18px;
+      margin-bottom: 32px;
+    }
+    
+    /* Input moderno */
+    .location-input {
+      background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 16px;
+      padding: 20px;
+      font-size: 18px;
+      color: #fff;
+      width: 100%;
+      margin-bottom: 24px;
+      transition: all 0.3s;
+    }
+    
+    .location-input:focus {
+      outline: none;
+      background: rgba(255,255,255,0.15);
+      border-color: #fff;
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.1);
+    }
+    
+    .location-input::placeholder {
+      color: rgba(255,255,255,0.5);
+    }
+    
+    /* Botones premium MEJORADOS */
+    .btn-premium {
+      background: #fff;
+      color: #000;
+      border: none;
+      border-radius: 16px;
+      padding: 18px 32px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 16px rgba(255,255,255,0.2);
+      width: 100%;
+      margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .btn-premium::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.1);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+    
+    .btn-premium:hover::before {
+      width: 300px;
+      height: 300px;
+    }
+    
+    .btn-premium:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 8px 24px rgba(255,255,255,0.4);
+    }
+    
+    .btn-premium:active {
+      transform: translateY(-2px) scale(0.98);
+    }
+    
+    .btn-secondary {
+      background: transparent;
+      border: 2px solid rgba(255,255,255,0.3);
+      color: #fff;
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: #fff;
+    }
+    
+    /* Badge de taxis disponibles */
+    .taxi-badge {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(10px);
+      padding: 16px 24px;
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 1000;
+      animation: fadeInDown 0.5s ease-out;
+    }
+    
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .taxi-count {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    /* Logo */
+    .logo {
+      position: fixed;
+      top: 24px;
+      left: 24px;
+      font-size: 24px;
+      font-weight: 800;
+      z-index: 1000;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    /* Iconos animados */
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+  </style>
+  <meta name="description" content="Seguimiento en tiempo real para flotas y taxis en Ramallo, Buenos Aires." />
+  <meta name="theme-color" content="#000000" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script>
+    function buildUrls(driverId) {
+      const base = `${location.origin}`;
+      return {
+        driver: `${base}/driver.html?driverId=${encodeURIComponent(driverId)}`,
+        client: `${base}/client.html?driverId=${encodeURIComponent(driverId)}`,
+      };
+    }
+  </script>
+  <script>
+    // Prefill id from query or localStorage
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('driverId');
+      input.value = new URLSearchParams(location.search).get('driverId') || localStorage.getItem('driverId') || 'taxi-ramallo-1';
+    });
+  </script>
+  <script>
+    function updateShare() {
+      const id = document.getElementById('driverId').value.trim() || 'taxi-ramallo-1';
+      localStorage.setItem('driverId', id);
+      const urls = buildUrls(id);
+      document.getElementById('driverLink').href = urls.driver;
+      document.getElementById('clientLink').href = urls.client;
+      // QR
+      const dqr = document.getElementById('qrDriver');
+      const cqr = document.getElementById('qrClient');
+      dqr.innerHTML = ''; cqr.innerHTML = '';
+      if (window.QRCode && QRCode.toCanvas) {
+        QRCode.toCanvas(dqr, urls.driver, { width: 160 });
+        QRCode.toCanvas(cqr, urls.client, { width: 160 });
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Mapa de fondo animado -->
+  <div id="bgMap"></div>
+  
+  <!-- Logo -->
+  <div class="logo">
+    🚕 TuRemis
+  </div>
+  
+  <!-- Badge de taxis disponibles -->
+  <div class="taxi-badge">
+    <span class="pulse" style="font-size: 28px;">🚕</span>
+    <div>
+      <div class="taxi-count" id="taxiCountBadge">...</div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.7);">taxis disponibles</div>
+    </div>
+  </div>
+  
+  <div class="content">
+    <div class="container">
+      <div class="hero-glass">
+        <h1>¿A dónde vas?</h1>
+        <p class="subtitle">Tu taxi en minutos</p>
+        
+        <input type="text" class="location-input" id="locationInput" placeholder="📍 Tu ubicación se detectará automáticamente" readonly />
+        
+        <button class="btn-premium" onclick="location.href='/request.html'">
+          <i class="bi bi-lightning-charge-fill me-2"></i>Pedir taxi ahora
+        </button>
+        
+        <button class="btn-premium btn-secondary" onclick="location.href='/driver.html'">
+          <i class="bi bi-car-front me-2"></i>Soy conductor
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // 🎯 Mapa de fondo con taxis animados
+    const bgMap = L.map('bgMap', { 
+      zoomControl: false, 
+      attributionControl: false,
+      dragging: false,
+      scrollWheelZoom: false
+    }).setView([-33.4847, -60.0062], 13);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+      maxZoom: 19 
+    }).addTo(bgMap);
+    
+    // Taxis fake animados
+    const taxiIcon = L.divIcon({
+      html: '<div style="font-size:32px;">🚕</div>',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+    
+    const fakeTaxis = [];
+    for (let i = 0; i < 5; i++) {
+      const lat = -33.4847 + (Math.random() - 0.5) * 0.02;
+      const lng = -60.0062 + (Math.random() - 0.5) * 0.02;
+      const marker = L.marker([lat, lng], { icon: taxiIcon }).addTo(bgMap);
+      fakeTaxis.push({ marker, lat, lng });
+    }
+    
+    // Animar taxis
+    setInterval(() => {
+      fakeTaxis.forEach(taxi => {
+        taxi.lat += (Math.random() - 0.5) * 0.001;
+        taxi.lng += (Math.random() - 0.5) * 0.001;
+        taxi.marker.setLatLng([taxi.lat, taxi.lng]);
+      });
+    }, 2000);
+    
+    // Contador de taxis real
+    async function updateTaxiCount() {
+      try {
+        const res = await fetch('/api/drivers');
+        const json = await res.json();
+        const count = json.ok && json.drivers ? json.drivers.length : 0;
+        document.getElementById('taxiCountBadge').textContent = count || '0';
+      } catch {
+        document.getElementById('taxiCountBadge').textContent = '5';
+      }
+    }
+    
+    updateTaxiCount();
+    setInterval(updateTaxiCount, 5000);
+    
+    // Detectar ubicación
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`)
+          .then(r => r.json())
+          .then(data => {
+            const addr = data.address;
+            const city = addr.city || addr.town || addr.village || '';
+            document.getElementById('locationInput').value = `📍 ${city}`;
+          });
+      });
+    }
+    
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>
+                    <div class="card-body">
+                      <h6 class="card-title"><i class="bi bi-eye me-1"></i>Cliente</h6>
+                      <p class="small text-secondary mb-3">Para el pasajero o la central. Visualiza el mapa en tiempo real.</p>
+                      <a id="clientLink" class="btn btn-outline-primary w-100" href="#">Abrir</a>
+                      <div class="text-center mt-2"><canvas id="qrClient"></canvas></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="py-5">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-md-4">
+          <div class="card h-100 card-hover">
+            <div class="card-body">
+              <h5 class="card-title">Precisión y privacidad</h5>
+              <p class="card-text small text-secondary">HTTPS, permisos de ubicación precisos y control de umbral para asegurar datos confiables.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 card-hover">
+            <div class="card-body">
+              <h5 class="card-title">Mapa claro</h5>
+              <p class="card-text small text-secondary">Leaflet + OpenStreetMap, marcador, círculo de precisión y trazo del recorrido.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 card-hover">
+            <div class="card-body">
+              <h5 class="card-title">Listo para vender</h5>
+              <p class="card-text small text-secondary">Diseño moderno, enlaces compartibles y QR para onboarding inmediato de choferes y clientes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="py-4 border-top">
+    <div class="container small text-secondary d-flex justify-content-between">
+      <div>© Ramallo Taxi Tracker — Prototipo</div>
+      <div><a class="link-secondary" href="/">Inicio</a></div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Initialize links and QR on load (guard QRCode availability)
+    window.addEventListener('load', () => {
+      const ctaDriver = document.getElementById('ctaDriver');
+      const ctaClient = document.getElementById('ctaClient');
+      ctaDriver.addEventListener('click', (e) => { e.preventDefault(); location.href = document.getElementById('driverLink').href; });
+      ctaClient.addEventListener('click', (e) => { e.preventDefault(); location.href = document.getElementById('clientLink').href; });
+      try { updateShare(); } catch (e) { console.warn('QR disabled', e); }
+
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(()=>{});
+      }
+
+      // PWA install prompt
+      const btnInstall = document.getElementById('btnInstall');
+      let deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        btnInstall.classList.remove('d-none');
+      });
+      btnInstall.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        btnInstall.classList.add('d-none');
+      });
+    });
+  </script>
+</body>
+</html>

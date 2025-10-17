@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calificar Viaje | TuRemis</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .rating-card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .star-rating {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 30px 0;
+    }
+    .star {
+      font-size: 48px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      color: #ddd;
+      filter: grayscale(100%);
+    }
+    .star:hover {
+      color: #fbbf24;
+      transform: scale(1.3) rotate(10deg);
+      filter: grayscale(0%) drop-shadow(0 0 8px rgba(251, 191, 36, 0.6));
+    }
+    .star.active {
+      color: #fbbf24;
+      transform: scale(1.15);
+      filter: grayscale(0%) drop-shadow(0 0 8px rgba(251, 191, 36, 0.4));
+      animation: starPop 0.4s ease-out;
+    }
+    @keyframes starPop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.4) rotate(10deg); }
+      100% { transform: scale(1.15); }
+    }
+    .tip-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .tip-btn {
+      padding: 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 600;
+    }
+    .tip-btn:hover {
+      border-color: #10b981;
+      background: #f0fdf4;
+    }
+    .tip-btn.selected {
+      border-color: #10b981;
+      background: #10b981;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="rating-card">
+    <div class="text-center mb-4">
+      <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+      <h2 style="font-weight: 800; margin-bottom: 8px;">¡Viaje Completado!</h2>
+      <p style="color: #666;">¿Cómo fue tu experiencia?</p>
+    </div>
+    
+    <!-- Rating de estrellas -->
+    <div class="star-rating" id="starRating">
+      <i class="bi bi-star-fill star" data-rating="1"></i>
+      <i class="bi bi-star-fill star" data-rating="2"></i>
+      <i class="bi bi-star-fill star" data-rating="3"></i>
+      <i class="bi bi-star-fill star" data-rating="4"></i>
+      <i class="bi bi-star-fill star" data-rating="5"></i>
+    </div>
+    
+    <div class="text-center mb-4">
+      <h4 style="font-weight: 700; margin-bottom: 8px;">Total: <span id="totalAmount">$850</span></h4>
+      <p style="color: #666; font-size: 14px;">¿Querés dejar una propina?</p>
+    </div>
+    
+    <!-- Propinas -->
+    <div class="tip-buttons">
+      <div class="tip-btn" data-tip="50">
+        <div style="font-size: 18px; font-weight: 700;">$50</div>
+        <div style="font-size: 12px; color: #666;">5%</div>
+      </div>
+      <div class="tip-btn" data-tip="100">
+        <div style="font-size: 18px; font-weight: 700;">$100</div>
+        <div style="font-size: 12px; color: #666;">10%</div>
+      </div>
+      <div class="tip-btn" data-tip="200">
+        <div style="font-size: 18px; font-weight: 700;">$200</div>
+        <div style="font-size: 12px; color: #666;">20%</div>
+      </div>
+    </div>
+    
+    <!-- Comentario -->
+    <textarea class="form-control mb-3" rows="3" placeholder="Dejá un comentario (opcional)" id="comment"></textarea>
+    
+    <!-- Botón enviar -->
+    <button class="btn btn-primary w-100 py-3" style="border-radius: 12px; font-weight: 700; font-size: 18px;" id="submitBtn">
+      Enviar calificación
+    </button>
+  </div>
+  
+  <script>
+    const stars = document.querySelectorAll('.star');
+    const tipBtns = document.querySelectorAll('.tip-btn');
+    let selectedRating = 0;
+    let selectedTip = 0;
+    
+    // Rating
+    stars.forEach(star => {
+      star.addEventListener('click', () => {
+        selectedRating = parseInt(star.dataset.rating);
+        stars.forEach((s, i) => {
+          s.classList.toggle('active', i < selectedRating);
+        });
+      });
+    });
+    
+    // Propinas
+    tipBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tipBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedTip = parseInt(btn.dataset.tip);
+      });
+    });
+    
+    // Confetti effect
+    function createConfetti() {
+      const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+      for (let i = 0; i < 50; i++) {
+        const confetti = document.createElement('div');
+        confetti.style.cssText = `
+          position: fixed;
+          width: 10px;
+          height: 10px;
+          background: ${colors[Math.floor(Math.random() * colors.length)]};
+          left: ${Math.random() * 100}%;
+          top: -10px;
+          opacity: 1;
+          transform: rotate(${Math.random() * 360}deg);
+          animation: confettiFall ${2 + Math.random() * 2}s linear forwards;
+          pointer-events: none;
+          z-index: 10000;
+        `;
+        document.body.appendChild(confetti);
+        setTimeout(() => confetti.remove(), 4000);
+      }
+    }
+    
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes confettiFall {
+        to {
+          top: 100vh;
+          opacity: 0;
+          transform: translateX(${Math.random() * 200 - 100}px) rotate(${Math.random() * 720}deg);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Enviar
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('comment').value;
+      const urlParams = new URLSearchParams(window.location.search);
+      const rideId = urlParams.get('rideId');
+      
+      if (!selectedRating) {
+        alert('Por favor seleccioná una calificación');
+        return;
+      }
+      
+      try {
+        await fetch(`/api/rides/${rideId}/rate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating: selectedRating,
+            tip: selectedTip,
+            comment
+          })
+        });
+        
+        // Confetti celebration!
+        createConfetti();
+        
+        setTimeout(() => {
+          alert('¡Gracias por tu calificación! 🎉');
+          window.location.href = '/';
+        }, 1000);
+      } catch (e) {
+        alert('Error al enviar calificación');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Base / Operador | Ramallo Taxi Tracker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- --- NUEVA FUNCIÓN DE SEGURIDAD: Leaflet para mapa central --- -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    #dispatchMap {
+      width: 100%;
+      height: 600px;
+      border-radius: .375rem;
+    }
+    /* Marcador parpadeante para alertas */
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.15); }
+    }
+    .alert-marker {
+      animation: pulse-red 1.5s ease-in-out infinite;
+      background: #dc3545;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      box-shadow: 0 0 10px rgba(220, 53, 69, 0.8);
+    }
+    .alert-item {
+      border-left: 4px solid #dc3545;
+      background: #fff3cd;
+    }
+    .alert-item:hover {
+      background: #ffe69c;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+    <div class="container">
+      <a class="navbar-brand" href="/"><i class="bi bi-taxi-front-fill text-warning me-2"></i>Ramallo Taxi Tracker</a>
+    </div>
+  </nav>
+
+  <main class="container-fluid py-4">
+    <!-- --- NUEVA FUNCIÓN DE SEGURIDAD: Mapa central --- -->
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-map me-2"></i>Mapa de Monitoreo en Tiempo Real</h5>
+          </div>
+          <div class="card-body p-0">
+            <div id="dispatchMap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- --- NUEVA FUNCIÓN DE SEGURIDAD: Panel de alertas --- -->
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <div class="card shadow-sm border-danger">
+          <div class="card-header bg-danger text-white">
+            <div class="d-flex align-items-center justify-content-between">
+              <h5 class="mb-0"><i class="bi bi-exclamation-triangle-fill me-2"></i>Alertas de Seguridad Activas</h5>
+              <span class="badge bg-white text-danger fs-6" id="alertCount">0</span>
+            </div>
+          </div>
+          <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+            <div id="alertsList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h1 class="h5 m-0">Pedidos</h1>
+              <button id="refresh" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr><th>Hora</th><th>Nombre</th><th>Desde</th><th>Hasta</th><th>Tel</th><th>Estado</th><th>Chofer</th><th></th></tr>
+                </thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="h6">Asignar / Actualizar</h2>
+            <div class="mb-2"><small class="text-secondary">Ride</small> <span id="selRide" class="fw-semibold">-</span></div>
+            <div class="mb-2">
+              <label class="form-label">Driver ID</label>
+              <input id="assignDriverId" class="form-control" placeholder="ej: taxi-ramallo-1" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Estado</label>
+              <select id="assignStatus" class="form-select">
+                <option value="">(sin cambio)</option>
+                <option value="assigned">Asignado</option>
+                <option value="arriving">En camino</option>
+                <option value="arrived">Llegué</option>
+                <option value="ontrip">En viaje</option>
+                <option value="completed">Finalizado</option>
+                <option value="canceled">Cancelado</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">ETA (segundos)</label>
+              <input id="assignEta" type="number" class="form-control" placeholder="ej: 300" />
+            </div>
+            <div class="d-grid gap-2">
+              <button id="btnAssign" class="btn btn-primary">Asignar chofer</button>
+              <button id="btnUpdate" class="btn btn-outline-primary">Actualizar estado/ETA</button>
+              <a id="btnOpenTrack" target="_blank" class="btn btn-outline-success">Abrir seguimiento</a>
+              <a id="btnShareWa" target="_blank" class="btn btn-outline-success"><i class="bi bi-whatsapp"></i> Compartir por WhatsApp</a>
+              <div class="mt-3">
+                <div class="small text-secondary">Enlace para el conductor</div>
+                <div class="input-group">
+                  <input id="driverDeepLink" class="form-control" readonly />
+                  <button id="copyDriverLink" class="btn btn-outline-secondary" type="button">Copiar</button>
+                  <a id="waDriverLink" class="btn btn-outline-success" target="_blank"><i class="bi bi-whatsapp"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    // --- NUEVA FUNCIÓN DE SEGURIDAD: Setup mapa y socket ---
+    const socket = io();
+    const dispatchMap = L.map('dispatchMap').setView([-33.4847, -60.0062], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(dispatchMap);
+    
+    const driverMarkers = {}; // driverId -> { marker, circle, hasAlert }
+    const alertMarkerIcon = L.divIcon({ className: '', html: '<div class="alert-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+    const normalMarkerIcon = L.divIcon({ className: '', html: '<div style="background:#0d6efd;border:2px solid #fff;border-radius:50%;width:14px;height:14px;"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
+    
+    // --- NUEVA FUNCIÓN DE SEGURIDAD: Poll de ubicaciones de drivers ---
+    async function refreshDriversOnMap() {
+      try {
+        const res = await fetch('/api/drivers');
+        const json = await res.json();
+        if (!json.ok || !Array.isArray(json.drivers)) return;
+        
+        const activeDrivers = new Set();
+        json.drivers.forEach(d => {
+          if (!isFinite(d.lat) || !isFinite(d.lng)) return;
+          activeDrivers.add(d.driverId);
+          
+          const latlng = [d.lat, d.lng];
+          if (!driverMarkers[d.driverId]) {
+            const marker = L.marker(latlng, { icon: normalMarkerIcon, title: d.driverId }).addTo(dispatchMap);
+            const circle = L.circle(latlng, { radius: Math.min(d.accuracy||50, 100), color: '#0d6efd', fillOpacity: 0.1 }).addTo(dispatchMap);
+            driverMarkers[d.driverId] = { marker, circle, hasAlert: false };
+          } else {
+            const dm = driverMarkers[d.driverId];
+            dm.marker.setLatLng(latlng);
+            dm.circle.setLatLng(latlng);
+            dm.circle.setRadius(Math.min(d.accuracy||50, 100));
+          }
+        });
+        
+        // Remover drivers offline
+        Object.keys(driverMarkers).forEach(did => {
+          if (!activeDrivers.has(did)) {
+            dispatchMap.removeLayer(driverMarkers[did].marker);
+            dispatchMap.removeLayer(driverMarkers[did].circle);
+            delete driverMarkers[did];
+          }
+        });
+      } catch (err) {
+        console.error('Error refreshing drivers', err);
+      }
+    }
+    
+    // --- NUEVA FUNCIÓN DE SEGURIDAD: Marcar driver con alerta ---
+    function markDriverAlert(driverId) {
+      if (!driverMarkers[driverId]) return;
+      const dm = driverMarkers[driverId];
+      if (!dm.hasAlert) {
+        dm.marker.setIcon(alertMarkerIcon);
+        dm.circle.setStyle({ color: '#dc3545', fillColor: '#dc3545' });
+        dm.hasAlert = true;
+      }
+    }
+    
+    // --- NUEVA FUNCIÓN DE SEGURIDAD: Lista de alertas ---
+    const alertsList = document.getElementById('alertsList');
+    const alertCount = document.getElementById('alertCount');
+    
+    async function loadAlerts() {
+      try {
+        const res = await fetch('/api/alerts/active');
+        const json = await res.json();
+        if (!json.ok || !Array.isArray(json.alerts)) return;
+        
+        alertCount.textContent = json.alerts.length;
+        alertsList.innerHTML = '';
+        
+        if (json.alerts.length === 0) {
+          alertsList.innerHTML = '<p class="text-center text-secondary mb-0">No hay alertas activas</p>';
+          return;
+        }
+        
+        json.alerts.forEach(alert => {
+          const div = document.createElement('div');
+          div.className = 'alert-item p-3 mb-2 rounded';
+          const ts = new Date(alert.timestamp).toLocaleString();
+          div.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1">
+                <div class="fw-bold text-danger"><i class="bi bi-shield-exclamation me-1"></i>${alert.type}</div>
+                <div class="small"><strong>Viaje:</strong> ${alert.rideId} | <strong>Conductor:</strong> ${alert.driverId || 'N/A'}</div>
+                ${alert.description ? `<div class="small text-secondary">${alert.description}</div>` : ''}
+                <div class="small text-secondary">${ts}</div>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-success resolve-btn" data-id="${alert.id}">Resolver</button>
+              </div>
+            </div>
+          `;
+          
+          // Marcar driver en mapa
+          if (alert.driverId) markDriverAlert(alert.driverId);
+          
+          // Zoom al hacer click
+          div.addEventListener('click', (e) => {
+            if (e.target.classList.contains('resolve-btn')) return;
+            if (alert.lastCoord && isFinite(alert.lastCoord.lat) && isFinite(alert.lastCoord.lng)) {
+              dispatchMap.flyTo([alert.lastCoord.lat, alert.lastCoord.lng], 16, { duration: 1 });
+            }
+          });
+          
+          // Resolver alerta
+          div.querySelector('.resolve-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('¿Marcar esta alerta como resuelta?')) return;
+            try {
+              const r = await fetch(`/api/alerts/${alert.id}/resolve`, { method: 'POST' });
+              if (r.ok) {
+                await loadAlerts();
+                alert('✅ Alerta resuelta');
+              }
+            } catch {}
+          });
+          
+          alertsList.appendChild(div);
+        });
+      } catch (err) {
+        console.error('Error loading alerts', err);
+      }
+    }
+    
+    // --- NUEVA FUNCIÓN DE SEGURIDAD: Socket listeners ---
+    socket.on('global_alert', (alert) => {
+      loadAlerts();
+      if (alert.driverId) markDriverAlert(alert.driverId);
+      // Notificación sonora
+      try { navigator.vibrate?.([500,200,500]); } catch {}
+    });
+    
+    socket.on('alert_resolved', () => {
+      loadAlerts();
+    });
+    
+    // Refresh periódico
+    setInterval(refreshDriversOnMap, 5000);
+    setInterval(loadAlerts, 10000);
+    window.addEventListener('load', () => {
+      refreshDriversOnMap();
+      loadAlerts();
+    });
+    
+    const rows = document.getElementById('rows');
+    const refreshBtn = document.getElementById('refresh');
+    const selRide = document.getElementById('selRide');
+    const assignDriverId = document.getElementById('assignDriverId');
+    const assignStatus = document.getElementById('assignStatus');
+    const assignEta = document.getElementById('assignEta');
+    const btnAssign = document.getElementById('btnAssign');
+    const btnUpdate = document.getElementById('btnUpdate');
+    const btnOpenTrack = document.getElementById('btnOpenTrack');
+    const btnShareWa = document.getElementById('btnShareWa');
+    const driverDeepLink = document.getElementById('driverDeepLink');
+    const copyDriverLink = document.getElementById('copyDriverLink');
+    const waDriverLink = document.getElementById('waDriverLink');
+
+    let selectedRideId = null;
+
+    async function loadRides() {
+      const res = await fetch('/api/rides');
+      const list = await res.json();
+      rows.innerHTML = '';
+      for (const ride of list) {
+        const tr = document.createElement('tr');
+        const when = new Date(ride.createdAt).toLocaleTimeString();
+        tr.innerHTML = `
+          <td>${when}</td>
+          <td>${ride.name || '-'}</td>
+          <td>${ride.pickupText || '-'}</td>
+          <td>${ride.destText || '-'}</td>
+          <td>${ride.phone || '-'}</td>
+          <td><span class="badge bg-secondary">${ride.status}</span></td>
+          <td>${ride.driverId || '-'}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-primary">Seleccionar</button>
+          </td>`;
+        tr.querySelector('button').addEventListener('click', () => selectRide(ride));
+        rows.appendChild(tr);
+      }
+    }
+
+    function selectRide(ride) {
+      selectedRideId = ride.rideId;
+      selRide.textContent = ride.rideId;
+      assignDriverId.value = ride.driverId || '';
+      btnOpenTrack.href = `/client.html?rideId=${ride.rideId}`;
+      btnShareWa.href = `https://wa.me/?text=${encodeURIComponent('Seguí tu remís: ' + location.origin + '/client.html?rideId=' + ride.rideId)}`;
+      const dlink = `${location.origin}/driver.html?driverId=${encodeURIComponent(assignDriverId.value||'')}&rideId=${ride.rideId}`;
+      driverDeepLink.value = dlink;
+      waDriverLink.href = `https://wa.me/?text=${encodeURIComponent('Abrí el link para tomar el viaje: ' + dlink)}`;
+    }
+
+    refreshBtn.addEventListener('click', loadRides);
+    window.addEventListener('load', loadRides);
+
+    btnAssign.addEventListener('click', async () => {
+      if (!selectedRideId) return alert('Seleccioná un pedido');
+      const body = { driverId: assignDriverId.value.trim() };
+      if (!body.driverId) return alert('Ingresá Driver ID');
+      const res = await fetch(`/api/rides/${selectedRideId}/assign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) return alert('Error asignando');
+      await loadRides();
+      // refresh driver link
+      const dlink = `${location.origin}/driver.html?driverId=${encodeURIComponent(assignDriverId.value.trim())}&rideId=${selectedRideId}`;
+      driverDeepLink.value = dlink;
+      waDriverLink.href = `https://wa.me/?text=${encodeURIComponent('Abrí el link para tomar el viaje: ' + dlink)}`;
+    });
+
+    btnUpdate.addEventListener('click', async () => {
+      if (!selectedRideId) return alert('Seleccioná un pedido');
+      const body = {};
+      if (assignStatus.value) body.status = assignStatus.value;
+      if (assignEta.value) body.etaSec = Number(assignEta.value);
+      const res = await fetch(`/api/rides/${selectedRideId}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) return alert('Error actualizando');
+      await loadRides();
+    });
+  </script>
+</body>
+</html>
